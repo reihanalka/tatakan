@@ -225,14 +225,14 @@ namespace Tatakan
         {
             int i = Array.IndexOf(args, "--demo");
             var files = args.Skip(i + 1).Where(a => !a.StartsWith("--")).ToList();
-            var w = NewShelf(new Point(420, 520));
+            var w = NewShelf(new Point(args.Contains("--pair") ? 60 : 420, 520));
             if (w == null) return;
             w.Shelf.Add(files.Select(ShelfItem.FromFile));
             if (args.Contains("--expand")) w.SetExpanded(true);
             if (args.Contains("--pair"))
             {
-                var e = new ShelfWindow(new Point(760, 520)); Track(e); e.ShowShelf();
-                var l = new ShelfWindow(new Point(1100, 520)); Track(l); l.ShowShelf();
+                var e = new ShelfWindow(new Point(300, 520)); Track(e); e.ShowShelf();
+                var l = new ShelfWindow(new Point(560, 520)); Track(l); l.ShowShelf();
                 l.Shelf.Add(files.Select(ShelfItem.FromFile));
                 l.Shelf.Add(new[] { ShelfItem.FromText("Client brief v2 — colour revision"), ShelfItem.FromLink("https://github.com/reihanalka/tatakan", "Tatakan on GitHub") });
                 l.Shelf.Name = "KV Revision"; l.Shelf.ColorIndex = 2;

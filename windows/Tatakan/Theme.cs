@@ -96,7 +96,7 @@ namespace Tatakan
     internal static class Glyph
     {
         public const string Close = "\uE711", More = "\uE712", Share = "\uE72D", Paste = "\uE77F", List = "\uE8FD",
-            Stack = "\uE8F1", Open = "\uE8A7", Folder = "\uE838", Copy = "\uE8C8", Link = "\uE71B", Save = "\uE74E",
+            Stack = "\uE8A9", Open = "\uE8A7", Folder = "\uE838", Copy = "\uE8C8", Link = "\uE71B", Save = "\uE74E",
             Move = "\uE8DE", Zip = "\uE7B8", Photo = "\uE91B", Remove = "\uE738", Rename = "\uE8AC", Color = "\uE790",
             Delete = "\uE74D", Add = "\uE710", History = "\uE81C", Settings = "\uE713", Power = "\uE7E8",
             Text = "\uE8A5", Tray = "\uE8B7";
