@@ -38,9 +38,11 @@ namespace Tatakan
 
             DispatcherUnhandledException += (_, ex) =>
             {
-                System.Diagnostics.Debug.WriteLine("Tatakan: " + ex.Exception);
+                Log(ex.Exception);
                 ex.Handled = true;
             };
+            AppDomain.CurrentDomain.UnhandledException += (_, ex) => { if (ex.ExceptionObject is Exception x) Log(x); };
+            TaskScheduler.UnobservedTaskException += (_, ex) => { Log(ex.Exception); ex.SetObserved(); };
 
             bool? forceDark = args.Contains("--dark") ? true : args.Contains("--light") ? false : null;
             Theme.Init(forceDark);
@@ -66,6 +68,20 @@ namespace Tatakan
             tray?.Dispose();
             mutex?.Dispose();
             base.OnExit(e);
+        }
+
+        /// <summary>Errors go to %LOCALAPPDATA%\Tatakan\error.log (attach it to bug reports).</summary>
+        public static void Log(Exception e)
+        {
+            try
+            {
+                var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Tatakan");
+                Directory.CreateDirectory(dir);
+                var f = Path.Combine(dir, "error.log");
+                if (File.Exists(f) && new FileInfo(f).Length > 512_000) File.Delete(f);
+                File.AppendAllText(f, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {e}\n\n");
+            }
+            catch { }
         }
 
         // Shelves ----------------------------------------------------------------

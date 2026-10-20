@@ -32,7 +32,8 @@ function Shot([string]$name) {
 
 function Run([string]$name, [string]$extra) {
   Get-Process Tatakan -ErrorAction SilentlyContinue | Stop-Process -Force
-  Start-Sleep 1
+  (New-Object -ComObject Shell.Application).MinimizeAll()   # clean desktop behind the shelves
+  Start-Sleep 2
   $p = Start-Process $Exe -ArgumentList ("--demo " + ($files -join ' ') + " $extra") -PassThru
   Start-Sleep 6
   if ($p.HasExited) { throw "Tatakan exited early (code $($p.ExitCode)) for $name" }
@@ -45,4 +46,11 @@ Run 'shelf-list-dark' '--dark --expand'
 Run 'shelves-pair-light' '--light --pair'
 Run 'settings-dark' '--dark --settings'
 Get-Process Tatakan -ErrorAction SilentlyContinue | Stop-Process -Force
-Write-Host "OK  screenshots in $out"
+$log = Join-Path $env:LOCALAPPDATA 'Tatakan\error.log'
+if (Test-Path $log) {
+  Copy-Item $log $out
+  Write-Host '----- error.log -----'
+  Get-Content $log | Select-Object -First 80
+  throw 'Tatakan logged errors (see above)'
+}
+Write-Host "OK  screenshots in $out, no errors logged"

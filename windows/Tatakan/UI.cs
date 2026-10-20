@@ -77,6 +77,7 @@ namespace Tatakan
             var template = new ControlTemplate(typeof(ScrollBar));
             var track = new FrameworkElementFactory(typeof(Track), "PART_Track");
             track.SetValue(Track.IsDirectionReversedProperty, true);
+            track.SetValue(Track.OrientationProperty, new TemplateBindingExtension(ScrollBar.OrientationProperty));
             var thumb = new FrameworkElementFactory(typeof(Thumb));
             thumb.SetValue(Control.TemplateProperty, thumbTemplate);
             track.AppendChild(thumb);
