@@ -53,7 +53,7 @@ Tools/assettool render Resources/Icons/menubar.svg Resources/Icons/menubar.png 3
 SLICES=()
 ARCH_FLAGS=()
 for a in $ARCHS; do
-  swiftc -O -swift-version 5 -target "$a-apple-macos14.0" \
+  swiftc -O -wmo -swift-version 5 -target "$a-apple-macos14.0" \
     -o "$TMP/Tatakan-$a" Sources/*.swift
   SLICES+=("$TMP/Tatakan-$a")
   ARCH_FLAGS+=(-arch "$a")

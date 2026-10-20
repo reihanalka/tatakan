@@ -8,6 +8,7 @@ final class ShakeDetector {
     private var dragChangeCount = 0
     private var samples: [(t: TimeInterval, x: CGFloat)] = []
     private var firedThisDrag = false
+    private var excludedThisDrag = false
 
     func start() {
         stop()
@@ -16,6 +17,9 @@ final class ShakeDetector {
             self?.dragChangeCount = drag.changeCount
             self?.samples.removeAll()
             self?.firedThisDrag = false
+            // frontmost app checked once per drag (was a lookup on every mouse-dragged event)
+            let bid = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+            self?.excludedThisDrag = Settings.shared.excludedApps.contains(bid)
         } as Any)
         monitors.append(NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDragged) { [weak self] _ in
             self?.track(drag)
@@ -32,11 +36,9 @@ final class ShakeDetector {
 
     private func track(_ drag: NSPasteboard) {
         let s = Settings.shared
-        guard s.shakeEnabled, !firedThisDrag else { return }
+        guard s.shakeEnabled, !firedThisDrag, !excludedThisDrag else { return }
         // Only when a real drag session started (drag pasteboard changed since mouse down).
         guard drag.changeCount != dragChangeCount else { return }
-        if let bid = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
-           s.excludedApps.contains(bid) { return }
 
         let now = ProcessInfo.processInfo.systemUptime
         let x = NSEvent.mouseLocation.x

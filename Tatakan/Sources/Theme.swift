@@ -16,7 +16,9 @@ enum PT {
     static let onInk = dyn(0xFFFFFF, 0x111111)
     static let mute = dyn(0x6E6E6C, 0x8A8A88)
     static let line = dyn(0xD9D9D6, 0x2C2C2C)
-    static let accent = Color(nsColor: NSColor(hex: 0xF07A42))
+    /// System accent (was #F07A42). From NSColor, not `Color.accentColor`: the latter turns grey
+    /// whenever the window isn't key, and these panels are non-activating.
+    static let accent = Color(nsColor: .controlAccentColor)
     static let accentSoft = dyn(0xF9D9C8, 0x4A2A1C)
 
     // Smoke: tokens laid over a blur, so the desktop shows through.
@@ -36,13 +38,18 @@ enum PT {
         return .system(size: size, weight: .bold, design: .monospaced)
     }
 
-    /// Dot-matrix numerals and wordmark.
-    static func dot(_ size: CGFloat) -> Font { variable("Doto", size, 900) }
+    // Typography is SF now (macOS 27 native). Same API as the original Doto / Space Grotesk / Space Mono
+    // helpers, so every call site follows without being rewritten.
+    private static func w(_ v: CGFloat) -> Font.Weight {
+        switch v { case ..<350: .regular; case ..<550: .medium; case ..<650: .semibold; case ..<750: .bold; default: .heavy }
+    }
+    /// Numerals and big display words: SF Pro Rounded, tabular digits.
+    static func dot(_ size: CGFloat) -> Font { .system(size: size, weight: .semibold, design: .rounded).monospacedDigit() }
     /// UI text.
-    static func ui(_ size: CGFloat, _ weight: CGFloat = 500) -> Font { variable("Space Grotesk", size, weight) }
-    /// Small uppercase labels.
+    static func ui(_ size: CGFloat, _ weight: CGFloat = 500) -> Font { .system(size: size, weight: w(weight)) }
+    /// Small labels (were uppercase Space Mono).
     static func mono(_ size: CGFloat, bold: Bool = false) -> Font {
-        .custom(bold ? "SpaceMono-Bold" : "SpaceMono-Regular", size: size)
+        .system(size: size + 1.5, weight: bold ? .semibold : .medium).monospacedDigit()
     }
     static func nsMono(_ size: CGFloat) -> NSFont {
         NSFont(name: "SpaceMono-Regular", size: size) ?? .monospacedSystemFont(ofSize: size, weight: .regular)
@@ -74,7 +81,7 @@ struct Label9: View {
     var color: Color = PT.mute
     init(_ t: String, color: Color = PT.mute) { text = t; self.color = color }
     var body: some View {
-        Text(text.uppercased()).font(PT.mono(9)).tracking(0.8).foregroundStyle(color).lineLimit(1)
+        Text(text).font(PT.mono(9)).foregroundStyle(color).lineLimit(1)
     }
 }
 

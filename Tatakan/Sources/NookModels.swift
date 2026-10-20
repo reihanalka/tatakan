@@ -16,6 +16,8 @@ final class NowPlaying: ObservableObject {
     @Published var playing = false
     @Published var duration: Double = 0
     @Published var art: NSImage?
+    /// Artwork's average colour, lifted for use on black (equalizer bars, artwork glow).
+    @Published var tint: Color = .white
     private var elapsed: Double = 0
     private var stamp: Double = 0
     private var rate: Double = 0
@@ -27,9 +29,13 @@ final class NowPlaying: ObservableObject {
     private var restarts = 0
 
     var hasMedia: Bool { !title.isEmpty }
-    var appName: String {
-        guard !bundle.isEmpty, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) else { return "" }
-        return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+    /// Resolved once per player change (was a LaunchServices lookup on every render).
+    private(set) var appName = ""
+
+    /// Publish only real changes: every assignment to a @Published fires objectWillChange,
+    /// which re-rendered the whole Nook (even closed) on each adapter line.
+    private func put<T: Equatable>(_ kp: ReferenceWritableKeyPath<NowPlaying, T>, _ v: T) {
+        if self[keyPath: kp] != v { self[keyPath: kp] = v }
     }
 
     /// Current position, extrapolated between updates.
@@ -76,11 +82,17 @@ final class NowPlaying: ObservableObject {
             let line = buffer[buffer.startIndex..<nl]
             buffer.removeSubrange(buffer.startIndex...nl)
             guard let o = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { continue }
-            title = o["title"] as? String ?? ""
-            artist = o["artist"] as? String ?? ""
-            bundle = o["bundle"] as? String ?? ""
-            playing = o["playing"] as? Bool ?? false
-            duration = o["duration"] as? Double ?? 0
+            put(\.title, o["title"] as? String ?? "")
+            put(\.artist, o["artist"] as? String ?? "")
+            let b = o["bundle"] as? String ?? ""
+            if b != bundle {
+                appName = b.isEmpty ? "" : NSWorkspace.shared.urlForApplication(withBundleIdentifier: b)
+                    .map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") } ?? ""
+                bundle = b
+            }
+            let pl = o["playing"] as? Bool ?? false
+            if pl != playing { withAnimation(Motion.settle) { playing = pl } }   // island widens/narrows smoothly
+            put(\.duration, o["duration"] as? Double ?? 0)
             elapsed = o["elapsed"] as? Double ?? 0
             stamp = o["timestamp"] as? Double ?? Date().timeIntervalSince1970
             rate = o["rate"] as? Double ?? 0
@@ -88,13 +100,38 @@ final class NowPlaying: ObservableObject {
             let a = o["art"] as? String ?? ""
             if a != artPath {
                 artPath = a
-                art = a.isEmpty ? nil : NSImage(contentsOfFile: a)
+                if a.isEmpty { withAnimation(Motion.settle) { art = nil; tint = .white } } else {
+                    // decode off the main thread; drop the result if the track changed meanwhile
+                    DispatchQueue.global(qos: .utility).async { [weak self] in
+                        let img = NSImage(contentsOfFile: a)
+                        let c = img.flatMap(NowPlaying.averageColor) ?? .white
+                        DispatchQueue.main.async {
+                            guard let self, self.artPath == a else { return }
+                            withAnimation(Motion.settle) { self.art = img; self.tint = c }
+                        }
+                    }
+                }
             }
         }
     }
 
+    /// 1×1 area average of the artwork, then pushed bright enough to read on black.
+    static func averageColor(_ img: NSImage) -> Color? {
+        guard let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        var px = [UInt8](repeating: 0, count: 4)
+        guard let ctx = CGContext(data: &px, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                  space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.interpolationQuality = .medium
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        let c = NSColor(srgbRed: CGFloat(px[0]) / 255, green: CGFloat(px[1]) / 255, blue: CGFloat(px[2]) / 255, alpha: 1)
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        c.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        return Color(nsColor: NSColor(hue: h, saturation: min(s * 1.25, 0.85), brightness: max(b, 0.82), alpha: 1))
+    }
+
     private func send(_ cmd: String) { input?.write((cmd + "\n").data(using: .utf8)!) }
-    func toggle() { playing.toggle(); send("toggle") }
+    func toggle() { withAnimation(Motion.settle) { playing.toggle() }; send("toggle") }
     func next() { send("next") }
     func previous() { send("prev") }
     func seek(_ t: Double) {
@@ -112,7 +149,7 @@ final class CalendarModel: ObservableObject {
     @Published var day = Calendar.current.startOfDay(for: Date())
     @Published var events: [EKEvent] = []
 
-    var granted: Bool { access == .fullAccess || access == .authorized }
+    var granted: Bool { access == .fullAccess }
 
     func request() {
         store.requestFullAccessToEvents { [weak self] _, _ in
@@ -126,9 +163,16 @@ final class CalendarModel: ObservableObject {
     func reload() {
         access = EKEventStore.authorizationStatus(for: .event)
         guard granted else { events = []; return }
-        let end = Calendar.current.date(byAdding: .day, value: 1, to: day)!
-        let pred = store.predicateForEvents(withStart: day, end: end, calendars: nil)
-        events = store.events(matching: pred).sorted { $0.startDate < $1.startDate }
+        let start = day, end = Calendar.current.date(byAdding: .day, value: 1, to: day)!
+        let store = self.store
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let pred = store.predicateForEvents(withStart: start, end: end, calendars: nil)
+            let list = store.events(matching: pred).sorted { $0.startDate < $1.startDate }
+            DispatchQueue.main.async {
+                guard let self, self.day == start else { return }   // user moved on to another day
+                self.events = list
+            }
+        }
     }
 
     func shift(_ days: Int) {
