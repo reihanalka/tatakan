@@ -37,7 +37,8 @@ mkdir -p "$STAGE/root/Applications"
 ditto --norsrc --noextattr --noqtn "$APP" "$STAGE/root/Applications/Tatakan.app"
 pkgbuild --analyze --root "$STAGE/root" "$STAGE/component.plist" >/dev/null
 # Always install to /Applications, even if an older copy lives somewhere else.
-/usr/libexec/PlistBuddy -c "Add :0:BundleIsRelocatable bool false" "$STAGE/component.plist"
+/usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$STAGE/component.plist" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Add :0:BundleIsRelocatable bool false" "$STAGE/component.plist"
 pkgbuild --root "$STAGE/root" \
   --component-plist "$STAGE/component.plist" \
   --scripts "$ROOT/installer/scripts" \
