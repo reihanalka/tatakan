@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  build:
+  mac:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,3 +21,40 @@ jobs:
 
       - name: Installer scripts parse
         run: bash -n scripts/install.sh scripts/make-release.sh installer/scripts/preinstall installer/scripts/postinstall
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build app (x64 + arm64) and installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y | Out-Null
+          .\windows\build.ps1
+
+      - name: Silent install
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem windows\dist\Tatakan-Setup-*.exe | Select-Object -First 1
+          $p = Start-Process $setup.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "setup exit $($p.ExitCode)" }
+          $exe = Join-Path $env:LOCALAPPDATA 'Programs\Tatakan\Tatakan.exe'
+          if (-not (Test-Path $exe)) { $exe = Join-Path $env:ProgramFiles 'Tatakan\Tatakan.exe' }
+          if (-not (Test-Path $exe)) { throw 'Tatakan.exe not installed' }
+          "TATAKAN_EXE=$exe" >> $env:GITHUB_ENV
+
+      - name: Run and take screenshots
+        shell: pwsh
+        run: .\windows\tools\smoke.ps1 -Exe $env:TATAKAN_EXE
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-build
+          path: |
+            windows/dist/Tatakan-Setup-*.exe
+            windows/dist/screens/

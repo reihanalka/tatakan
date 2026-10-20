@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AssemblyName>Tatakan</AssemblyName>
+    <RootNamespace>Tatakan</RootNamespace>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Version>0.4.0</Version>
+    <Product>Tatakan</Product>
+    <Company>Reihan Al Kautsar</Company>
+    <Copyright>© 2026 Reihan Al Kautsar. MIT License.</Copyright>
+    <Description>Drag-and-drop file shelf</Description>
+    <NoWarn>$(NoWarn);CA1416;WFAC010</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\Fonts\*.ttf" />
+    <Resource Include="Assets\app.ico" />
+    <Resource Include="Assets\tray-light.ico" />
+    <Resource Include="Assets\tray-dark.ico" />
+    <Resource Include="Assets\logo-256.png" />
+  </ItemGroup>
+
+</Project>
