@@ -7,7 +7,9 @@ Not covered by the MIT License:
 
 - The name "Tatakan" and the logo/icon artwork in "Tatakan - Logo.ai",
   "Tatakan_Icon.svg", "Tatakan_Icon_2.svg", Tatakan/Resources/AppIcon.icns,
-  Tatakan/Resources/Icons/ and docs/screenshots/appicon-preview.png belong to
+  Tatakan/Resources/Icons/, docs/screenshots/appicon-preview.png and the icon
+  and installer artwork in windows/Tatakan/Assets/ and windows/installer/ belong to
   Reihan Al Kautsar. See TRADEMARKS.md.
 - The Doto, Space Grotesk and Space Mono font files in Tatakan/Resources/Fonts/
+  and windows/Tatakan/Assets/Fonts/ (static instances made from the same fonts)
   are licensed under the SIL Open Font License 1.1. See OFL-*.txt there.

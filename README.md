@@ -5,15 +5,16 @@
 <h1 align="center">Tatakan</h1>
 
 <p align="center">
-  A drag-and-drop shelf for files, plus a small panel that grows out of the MacBook notch.<br>
-  Native Swift. Free and open source under MIT.
+  A drag-and-drop shelf for files on <b>macOS</b> and <b>Windows</b>.<br>
+  On a Mac it also grows a small panel out of the notch.<br>
+  Native on both. Free and open source under MIT.
 </p>
 
 <p align="center">
   <a href="https://github.com/reihanalka/tatakan/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/reihanalka/tatakan?color=F07A42"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-111">
-  <img alt="Apple Silicon + Intel" src="https://img.shields.io/badge/Apple%20Silicon%20%2B%20Intel-universal-555">
+  <img alt="Windows 10/11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4">
 </p>
 
 <p align="center"><a href="README.id.md">Baca dalam Bahasa Indonesia</a></p>
@@ -26,12 +27,20 @@
 
 ## Features
 
-- **Shelf**: shake the pointer while dragging anything and a floating shelf appears. Drop files in, drag them out later.
-- **Item actions**: copy, reveal in Finder, share, AirDrop, quick thumbnails.
-- **Nook**: a black panel at the notch with tabs for Now Playing, Tray, Calendar (today's events), Timer and Notes. On screens without a notch it shows as a slim pill at the top.
-- **Mirror**: a quick camera check before a call. Nothing is recorded.
-- **Bluetooth notices**: a small notice when headphones or other devices connect.
-- Light and dark mode, one accent colour (`#F07A42`).
+| | macOS | Windows |
+|---|:---:|:---:|
+| **Shelf**: shake the pointer while dragging, a floating shelf appears | ✅ | ✅ |
+| Drop files, folders, links, text and images; drag them out again | ✅ | ✅ |
+| Multiple shelves, names, colours, Recent Shelves | ✅ | ✅ |
+| Copy, open, reveal, save/move to folder, ZIP | ✅ | ✅ |
+| Resize and convert images, extract text (OCR) | ✅ | ✅ |
+| Share sheet | ✅ AirDrop, Messages, Mail… | ✅ Nearby Share, Mail, apps… |
+| Quick Look (Space) | ✅ | — |
+| **Nook**: notch panel with Now Playing, Tray, Calendar, Timer, Notes | ✅ | — Mac only |
+| Mirror, Bluetooth and battery notices in the notch | ✅ | — Mac only |
+| Light and dark mode, one accent colour (`#F07A42`) | ✅ | ✅ |
+
+The notch features only exist on the Mac, because that's where the notch is. The Windows version is the shelf, done properly.
 
 <p>
   <img src="docs/screenshots/nook-tray.png" width="49%">
@@ -40,9 +49,18 @@
   <img src="docs/screenshots/nook-notes.png" width="49%">
 </p>
 
-![Shelf](docs/screenshots/shelf-v0.2-dark.png)
+![Shelf on macOS](docs/screenshots/shelf-v0.2-dark.png)
 
-## Install
+**On Windows** (screenshots from a real Windows 11 build in CI):
+
+![Shelves on Windows](docs/screenshots/windows-shelves.png)
+
+<p>
+  <img src="docs/screenshots/windows-list-dark.png" width="38%">
+  <img src="docs/screenshots/windows-settings.png" width="58%">
+</p>
+
+## Install on a Mac
 
 Works on **Apple Silicon and Intel Macs** with **macOS 14 Sonoma or newer**.
 
@@ -67,11 +85,43 @@ Open **`Tatakan-x.y.z.dmg`**, drag Tatakan into Applications, then allow it once
 > [!NOTE]
 > Tatakan is not notarized by Apple yet (that needs a paid developer account), so macOS shows a warning the first time. The .pkg and the Terminal installer both clear it for you. The app has no network features and only asks for Calendar, Bluetooth and Camera when you use those tabs.
 
-### Uninstall
+**Uninstall:** quit Tatakan from its menu-bar icon, then move `/Applications/Tatakan.app` to the Trash.
 
-Quit Tatakan from its menu-bar icon, then move `/Applications/Tatakan.app` to the Trash.
+## Install on Windows
+
+Works on **Windows 10 (1809+) and Windows 11**, on regular **x64** PCs and **ARM64** (Snapdragon / Surface Pro X). One installer covers both.
+
+### Option 1: Installer (.exe) — easiest
+
+1. Download **`Tatakan-Setup-x.y.z.exe`** from the [latest release](https://github.com/reihanalka/tatakan/releases/latest).
+2. Run it. If **Windows protected your PC** appears, click **More info → Run anyway** (see the note below).
+3. Click through. If the PC doesn't have the free **.NET 8 Desktop Runtime** yet, the installer downloads it from Microsoft (about 55 MB) and asks for admin once.
+4. Tatakan starts in the notification area, bottom right. It may hide under the **^** arrow; drag it onto the taskbar to keep it visible.
+
+### Option 2: PowerShell, one line
+
+```powershell
+irm https://raw.githubusercontent.com/reihanalka/tatakan/main/windows/install.ps1 | iex
+```
+
+Downloads the latest installer, runs it silently, turns on *Start at sign-in* and opens Tatakan. Run it again to update.
+
+> [!NOTE]
+> The Windows build isn't code-signed yet (a certificate costs money every year), so SmartScreen warns on the first download. It's the same file GitHub Actions built from this repo; you can check it against `SHA256SUMS-windows.txt` on the release page.
+
+### Using it on Windows
+
+- **Open a shelf**: start dragging a file and give the pointer a quick left-right shake. Or press **Ctrl+Alt+Space**, or click the tray icon.
+- **Drop** files, folders, links, text or images on it. **Drag** the pile out to drop everything, or click it to see the list.
+- **Right-click** an item (or the **⋯** button) for Open, Copy, Save to Folder, ZIP, Image, Share…
+- **On a focused shelf**: `Ctrl+C` `Ctrl+V` `Ctrl+A` · `Del` remove · `Enter` open · `F2` rename · `Esc` close.
+- **Settings** (right-click the tray icon): shake sensitivity, apps where shaking is ignored, start at sign-in.
+
+**Uninstall:** *Settings → Apps → Installed apps → Tatakan → Uninstall*.
 
 ## Build from source
+
+### macOS
 
 You only need Apple's Command Line Tools (`xcode-select --install`). No Xcode project.
 
@@ -84,48 +134,58 @@ open Tatakan/build/Tatakan.app
 
 `build.sh` compiles the SVG helper (`Tools/assettool.swift`), regenerates the app icon and menu-bar glyph from `Tatakan_Icon.svg` and `Tatakan_Icon_2.svg`, compiles `Sources/*.swift`, builds the now-playing adapter (`Resources/MediaAdapter.m`) and signs the bundle.
 
-Options:
-
 | Variable | Effect |
 |---|---|
 | `UNIVERSAL=1` | One app for Apple Silicon + Intel |
 | `SIGN=-` | Force ad-hoc signing |
 
-To build every release file (`.pkg`, `.dmg`, `.zip`) into `dist/`:
+All Mac release files (`.pkg`, `.dmg`, `.zip`) into `dist/`: `./scripts/make-release.sh`
 
-```bash
-./scripts/make-release.sh
+### Windows
+
+Needs the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (and [Inno Setup 6](https://jrsoftware.org/isinfo.php) for the installer). C# + WPF, no Visual Studio required.
+
+```powershell
+git clone https://github.com/reihanalka/tatakan.git
+cd tatakan
+.\windows\build.ps1 -Run           # build and start it
+.\windows\build.ps1                # x64 + arm64 builds and windows\dist\Tatakan-Setup-x.y.z.exe
 ```
+
+The Windows project also builds from a Mac or Linux with `dotnet build windows/Tatakan -r win-x64` (it can't run there, but it's a quick compile check). The icons and fonts in `windows/Tatakan/Assets/` are generated from the same SVGs and fonts as the Mac app by `windows/tools/make-icons.sh` and `windows/tools/make-fonts.py`.
 
 ## Project layout
 
 ```
-Tatakan_Icon.svg          colour logo → app icon
-Tatakan_Icon_2.svg        mono logo   → menu-bar template glyph
-Tatakan/
+Tatakan_Icon.svg          colour logo → app icons (Mac + Windows)
+Tatakan_Icon_2.svg        mono logo   → menu-bar / tray glyph
+Tatakan/                  macOS app (Swift, SwiftUI + AppKit)
 ├── build.sh
-├── Info.plist
-├── Sources/              Swift (AppDelegate, Shelf, Notch, Actions, Theme, …)
+├── Sources/              AppDelegate, Shelf, Notch, Actions, Theme, …
 ├── Resources/            fonts (OFL), icons, MediaAdapter.m
 └── Tools/assettool.swift font list + SVG → PNG
-installer/                .pkg installer (welcome page, pre/postinstall scripts)
-scripts/
-├── make-release.sh       builds dist/*.pkg, *.dmg, *.zip
-└── install.sh            one-line Terminal installer
+installer/                macOS .pkg installer
+scripts/                  make-release.sh, install.sh (macOS)
+windows/                  Windows app (C#, WPF)
+├── Tatakan/              ShelfWindow, Shake, Ingest, Actions, ShareUI, TrayIcon, …
+├── installer/Tatakan.iss Inno Setup installer (installs .NET 8 if needed)
+├── build.ps1             builds x64 + arm64 + installer
+├── install.ps1           one-line PowerShell installer
+└── tools/                icon/font generators, CI smoke test
 docs/screenshots/
 ```
 
 ## Notes for contributors
 
-- **Now Playing** reads Apple's private `MediaRemote` framework through a small dylib loaded by `/usr/bin/perl`. It's a workaround, not a public API. It may break in a future macOS, and it would not pass App Store review.
-- Permissions asked at runtime: Calendar, Bluetooth, Camera. Nothing leaves the Mac.
-- Some APIs used are deprecated (you'll see compiler warnings). They still work on macOS 14–27. PRs welcome.
-- Intel builds compile and are included in releases, but the author tests on Apple Silicon. Reports from Intel Macs are very welcome.
+- **Now Playing** (Mac) reads Apple's private `MediaRemote` framework through a small dylib loaded by `/usr/bin/perl`. It's a workaround, not a public API. It may break in a future macOS, and it would not pass App Store review.
+- **Shake to open** on Windows uses a low-level mouse hook (`WH_MOUSE_LL`). No admin rights, no keylogging: only mouse moves while the left button is held are looked at.
+- Some Mac APIs used are deprecated (you'll see compiler warnings). They still work on macOS 14–27. PRs welcome.
+- Testing: the author uses Apple Silicon. Windows builds are installed and screenshotted on a clean Windows runner in CI on every push. Reports from Intel Macs and real Windows PCs are very welcome.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
 
 ## License
 
 - **Code**: [MIT](LICENSE) © 2026 Reihan Al Kautsar
-- **Fonts**: Doto, Space Grotesk and Space Mono, [SIL Open Font License 1.1](Tatakan/Resources/Fonts)
+- **Fonts**: Doto, Space Grotesk and Space Mono, [SIL Open Font License 1.1](Tatakan/Resources/Fonts). The Windows build ships static instances of the same fonts.
 - **Name & logo**: "Tatakan" and its icon are **not** covered by the MIT license. See [TRADEMARKS.md](TRADEMARKS.md) and [NOTICE](NOTICE). Forks are welcome, just give them their own name and icon.
