@@ -4,6 +4,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Changed (Mac)
+- Nook and shelves use native Liquid Glass on macOS 26+ (black at the notch band, fading to clear glass); a dark material fallback keeps macOS 14–25 working. The closed notch stays pure black.
+- Apple Intelligence style glow when the Nook opens and while files hover over the Nook or a shelf (toggle in Settings → Look; Reduce Motion respected).
+- SF fonts, SF Symbol tabs with a sliding glass pill, Control Center style cards and buttons, system accent colour.
+- Open animation grows out of the notch (scale + blur-in); close shrinks back with no ghosting.
+- Music: the island widens smoothly, play/pause morphs, artwork-tinted equalizer, smooth progress bar.
+
+### Fixed (Mac)
+- Crash from an endless constraint pass: `AnchoredButton` (an `NSButton` inside SwiftUI) kept re-laying out.
+- Hover only opened the Nook once: the notch sensor's tracking area went stale while hidden.
+- Pointer pushed against the top screen edge didn't open the Nook (`NSRect.contains` excludes `maxY`).
+- Shadow/glass clipped into a visible box at the notch sides (the window now has a transparent margin).
+- Calendar fetch no longer blocks the first frame of the open animation.
+
+### Performance (Mac)
+- Now Playing publishes only real changes (it used to redraw the whole Nook on every update); artwork decodes off the main thread.
+- Bounded thumbnail cache, cached file sizes, glow animates only while active, whole-module optimisation (`-wmo`). Idle: 0% CPU, 0 wakeups.
+
+### Dev tools (`Tatakan/Tools/`)
+- `smoke.sh` (every demo scenario stays alive), `livecap.sh` / `closecap.sh` (screen-capture glass and animations), `repro.sh` / `lldb_exc.sh` (crash reasons), `hovertest.swift` / `clicktest.swift` (real-cursor tests, they move your pointer), `dev.sh` (build + install + relaunch).
+
 ### Ideas / help wanted
 - Notarized Mac builds and a code-signed Windows installer, so first launch doesn't warn.
 - A public replacement for the private MediaRemote "Now Playing" workaround (Mac).
