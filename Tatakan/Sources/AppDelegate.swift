@@ -241,6 +241,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             n.shelf.add(files.map(ShelfItem.file))
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                 n.open(tab: tab)
+                if let i = args.firstIndex(of: "--autoclose"), args.indices.contains(i + 1), let s = Double(args[i + 1]) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + s) { n.set(.closed) }
+                }
                 if args.contains("--drophover") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { n.model.dropHover = true } }
                 if args.contains("--airdrophover") { n.model.dropHover = true; n.model.hoverAirDrop = true }
             }

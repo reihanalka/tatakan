@@ -41,6 +41,7 @@ final class DropContainer: NSView {
 
 final class ShelfController: NSObject, NSWindowDelegate, QLPreviewPanelDataSource, QLPreviewPanelDelegate, ShelfHost {
     let shelf = Shelf()
+    let glow = GlowDriver()
     let panel: ShelfPanel
     var hostWindow: NSWindow { panel }
     private let container: DropContainer
@@ -71,9 +72,11 @@ final class ShelfController: NSObject, NSWindowDelegate, QLPreviewPanelDataSourc
         panel.minSize = NSSize(width: 170, height: 190)
         panel.delegate = self
         panel.animationBehavior = .utilityWindow
+        panel.appearance = NSAppearance(named: .darkAqua)   // black → clear glass surface, same as the Nook
 
         container.controller = self
-        let host = NSHostingView(rootView: ShelfView(controller: self).environmentObject(shelf))
+        let host = NSHostingView(rootView: ShelfView(controller: self, glow: glow).environmentObject(shelf))
+        host.sizingOptions = []   // window frame is ours (collapse/expand); see NookController
         host.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(host)
         NSLayoutConstraint.activate([
@@ -103,11 +106,16 @@ final class ShelfController: NSObject, NSWindowDelegate, QLPreviewPanelDataSourc
     func show() {
         panel.alphaValue = 0
         panel.orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { $0.duration = 0.16; panel.animator().alphaValue = 1 }
+        glow.glassAfter(0.32)
+        glow.reveal()
+        glow.burst()
+        NSAnimationContext.runAnimationGroup { $0.duration = 0.2; panel.animator().alphaValue = 1 }
     }
 
     func close() {
-        NSAnimationContext.runAnimationGroup({ $0.duration = 0.12; panel.animator().alphaValue = 0 },
+        glow.reset()
+        glow.glassOff()
+        NSAnimationContext.runAnimationGroup({ $0.duration = 0.14; panel.animator().alphaValue = 0 },
                                              completionHandler: { [weak self] in
             guard let self else { return }
             self.panel.orderOut(nil)
@@ -151,7 +159,7 @@ final class ShelfController: NSObject, NSWindowDelegate, QLPreviewPanelDataSourc
             f.origin.x = min(max(f.origin.x, vf.minX + 8), vf.maxX - f.width - 8)
             f.origin.y = max(f.origin.y, vf.minY + 8)
         }
-        withAnimation(.easeOut(duration: 0.18)) { shelf.expanded = on }
+        withAnimation(Motion.settle) { shelf.expanded = on }
         panel.setFrame(f, display: true, animate: true)
         if !on { shelf.selection = [] }
     }
@@ -204,8 +212,10 @@ final class ShelfController: NSObject, NSWindowDelegate, QLPreviewPanelDataSourc
 
 struct ShelfView: View {
     let controller: ShelfController
+    @ObservedObject var glow: GlowDriver
     @EnvironmentObject var shelf: Shelf
     @ObservedObject var settings = Settings.shared
+    private let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
 
     var body: some View {
         VStack(spacing: 0) {
@@ -218,12 +228,26 @@ struct ShelfView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             footer
         }
-        .background(ZStack { VisualEffect(); PT.smoke })
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(shelf.isTargeted ? PT.accent : PT.smokeLine, lineWidth: shelf.isTargeted ? 1.5 : 1)
-        )
+        .background {
+            ZStack {
+                LiquidSurface(shape: shape, glass: glow.glassReady, topAlpha: 0.9, veil: glow.glassReady ? 0 : 0.82)
+                AIBloom(driver: glow).mask(shape)
+            }
+        }
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(PT.smokeLine, lineWidth: 1))
+        .overlay {
+            // Drop target: Siri edge light; plain accent ring if the glow is switched off.
+            if shelf.isTargeted && !settings.aiGlow { shape.strokeBorder(PT.accent, lineWidth: 1.5) }
+        }
+        .overlay(AIGlowRim(shape: shape, driver: glow))
+        .scaleEffect(glow.revealed ? 1 : 0.86)
+        .opacity(glow.revealed ? 1 : 0)
+        .blur(radius: glow.revealed ? 0 : 18)
+        .animation(.easeOut(duration: 0.45), value: glow.revealed)   // blur clears slower than the scale lands
+        .environment(\.colorScheme, .dark)
+        .environment(\.controlActiveState, .key)    // same as the Nook: always look active
+        .onChange(of: shelf.isTargeted) { _, on in glow.hold(on) }
         .animation(.easeOut(duration: 0.12), value: shelf.isTargeted)
     }
 
@@ -240,8 +264,8 @@ struct ShelfView: View {
                             .textFieldStyle(.plain).font(PT.ui(12, 700))
                             .multilineTextAlignment(.center).frame(maxWidth: 130)
                     } else {
-                        Text(shelf.name.isEmpty ? "TATAKAN" : shelf.name.uppercased())
-                            .font(shelf.name.isEmpty ? PT.dot(15) : PT.ui(12, 700)).tracking(shelf.name.isEmpty ? 1 : 0.2)
+                        Text(shelf.name.isEmpty ? "Shelf" : shelf.name)
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(PT.ink).lineLimit(1)
                             .onTapGesture(count: 2) { shelf.renaming = true }
                     }
@@ -258,33 +282,21 @@ struct ShelfView: View {
         if shelf.items.isEmpty { return "Empty" }
         let bytes = shelf.items.reduce(Int64(0)) { sum, i in
             guard i.kind == .file, let u = i.url else { return sum }
-            return sum + Int64((try? u.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+            return sum + FileMeta.of(u).size
         }
-        let n = "\(PT.n2(shelf.items.count)) item\(shelf.items.count == 1 ? "" : "s")"
+        let n = "\(shelf.items.count) item\(shelf.items.count == 1 ? "" : "s")"
         return bytes > 0 && shelf.expanded ? n + " · " + ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) : n
     }
 
     private var emptyState: some View {
-        ZStack {
-            DotGrid(active: shelf.isTargeted)
-            VStack(spacing: 6) {
-                Text("DROP").font(PT.dot(30)).tracking(2)
-                    .foregroundStyle(shelf.isTargeted ? PT.accent : PT.ink)
-                Label9(shelf.isTargeted ? "Release to keep" : "Files · links · text")
-            }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(PT.smoke))
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(PT.smokeCard))
-        .padding(.horizontal, 10).padding(.bottom, 2)
+        DropZone(active: shelf.isTargeted, title: "Drop here", subtitle: "Files, links or text")
+            .padding(.horizontal, 10).padding(.bottom, 2)
     }
 
     // Collapsed: a pile of thumbnails on a card; drag it to drag everything.
     private var pileView: some View {
         let top = Array(shelf.items.suffix(3))
         return ZStack {
-            DotGrid(active: shelf.isTargeted).opacity(0.7)
             ForEach(Array(top.enumerated()), id: \.element.id) { i, item in
                 let depth = CGFloat(top.count - 1 - i)
                 Thumb(item: item, size: 84)
@@ -295,9 +307,11 @@ struct ShelfView: View {
         }
         .overlay(alignment: .topTrailing) {
             if shelf.items.count > 1 {
-                Text(PT.n2(shelf.items.count)).font(PT.dot(14)).foregroundStyle(PT.onInk)
-                    .padding(.horizontal, 7).padding(.vertical, 3)
-                    .background(Capsule().fill(PT.ink))
+                Text("\(shelf.items.count)").font(.system(size: 12, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .contentTransition(.numericText())
+                    .padding(.horizontal, 7).padding(.vertical, 2)
+                    .background(Capsule().fill(PT.accent))
                     .padding(8)
             }
         }
@@ -404,13 +418,13 @@ struct ItemRow: View {
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(PT.smoke.opacity(selected ? 0 : 1)))
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title).font(PT.ui(12, 600)).lineLimit(1).truncationMode(.middle)
-                    .foregroundStyle(selected ? PT.onInk : PT.ink)
-                Label9(subtitle, color: selected ? PT.onInk.opacity(0.7) : PT.mute)
+                    .foregroundStyle(PT.ink)
+                Label9(subtitle, color: selected ? Color.white.opacity(0.75) : PT.mute)
             }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 6).padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(selected ? PT.ink : PT.smokeCard))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(selected ? PT.accent : Color.white.opacity(0.06)))
         .contentShape(Rectangle())
     }
 
@@ -420,10 +434,10 @@ struct ItemRow: View {
         case .text: return "Text · \(item.text?.count ?? 0) chr"
         case .file:
             guard let url = item.url else { return "" }
-            let vals = try? url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
-            if vals?.isDirectory == true { return "Folder" }
+            let m = FileMeta.of(url)
+            if m.dir { return "Folder" }
             let ext = url.pathExtension.isEmpty ? "File" : url.pathExtension
-            let size = ByteCountFormatter.string(fromByteCount: Int64(vals?.fileSize ?? 0), countStyle: .file)
+            let size = ByteCountFormatter.string(fromByteCount: m.size, countStyle: .file)
             return "\(ext) · \(size)"
         }
     }
@@ -442,15 +456,14 @@ struct RoundIcon: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(hv.on ? PT.onInk : PT.ink)
+                .foregroundStyle(PT.ink)
                 .frame(width: 26, height: 26)
-                .background(Circle().fill(hv.on ? PT.ink : PT.smokeCard))
-                .overlay(Circle().stroke(PT.smokeLine, lineWidth: 1))
+                .background(Circle().fill(Color.white.opacity(hv.on ? 0.2 : 0.1)))
+                .contentShape(Circle())
         }
-        .buttonStyle(.plain)
-        .onHover { hv.on = $0 }
+        .buttonStyle(PressScale())
+        .onHover { h in withAnimation(Motion.quick) { hv.on = h } }
         .help(help)
-        .animation(.easeOut(duration: 0.1), value: hv.on)
     }
 }
 
@@ -472,16 +485,15 @@ struct AirDropButton: View {
     var body: some View {
         Button { Actions.send(shelf.targets, via: .sendViaAirDrop, shelf: shelf) } label: {
             AirDropGlyph(size: 14)
-                .foregroundStyle(hv.on ? PT.onInk : PT.ink)
+                .foregroundStyle(PT.ink)
                 .frame(width: 26, height: 26)
-                .background(Circle().fill(hv.on ? PT.ink : PT.smokeCard))
-                .overlay(Circle().stroke(PT.smokeLine, lineWidth: 1))
+                .background(Circle().fill(Color.white.opacity(hv.on ? 0.2 : 0.1)))
+                .contentShape(Circle())
         }
-        .buttonStyle(.plain)
-        .onHover { hv.on = $0 }
+        .buttonStyle(PressScale())
+        .onHover { h in withAnimation(Motion.quick) { hv.on = h } }
         .help("AirDrop")
         .disabled(shelf.items.isEmpty)
-        .animation(.easeOut(duration: 0.1), value: hv.on)
     }
 }
 
@@ -521,39 +533,44 @@ struct ShareButton: View {
 extension View {
     func roundChrome() -> some View {
         frame(width: 26, height: 26)
-            .background(Circle().fill(PT.smokeCard))
-            .overlay(Circle().stroke(PT.smokeLine, lineWidth: 1))
+            .background(Circle().fill(Color.white.opacity(0.1)))
     }
 }
 
-/// Button that gives its action the backing NSView (needed for menus & share pickers).
-struct AnchoredButton: NSViewRepresentable {
+/// Button that gives its action a backing NSView (needed for menus & share pickers).
+/// SwiftUI button + an inert anchor view. It used to be an NSButton inside SwiftUI: on macOS 27 the
+/// button re-laid out its image view on every pass, which invalidated SwiftUI layout again, until
+/// AppKit threw "more Update Constraints passes than views" and the app crashed.
+struct AnchoredButton: View {
     let symbol: String
     var help: String
     let action: (NSView) -> Void
+    @StateObject private var anchor = AnchorBox()
 
-    func makeNSView(context: Context) -> NSButton {
-        let b = NSButton()
-        b.bezelStyle = .shadowlessSquare
-        b.isBordered = false
-        b.imagePosition = .imageOnly
-        b.imageScaling = .scaleNone
-        b.image = NSImage(systemSymbolName: symbol, accessibilityDescription: help)?
-            .withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
-        b.contentTintColor = .labelColor
-        b.toolTip = help
-        b.target = context.coordinator
-        b.action = #selector(Coordinator.fire(_:))
-        return b
+    var body: some View {
+        Button { if let v = anchor.view { action(v) } } label: {
+            Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(PT.ink)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .background(AnchorView(box: anchor))
     }
-    func updateNSView(_ b: NSButton, context: Context) { context.coordinator.action = action }
-    func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+}
 
-    final class Coordinator: NSObject {
-        var action: (NSView) -> Void
-        init(action: @escaping (NSView) -> Void) { self.action = action }
-        @objc func fire(_ sender: NSButton) { action(sender) }
+final class AnchorBox: ObservableObject { weak var view: NSView? }
+
+struct AnchorView: NSViewRepresentable {
+    let box: AnchorBox
+    /// Flipped like NSControl, so menu offsets written for the old NSButton still land below it.
+    final class V: NSView {
+        override var isFlipped: Bool { true }
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
+    func makeNSView(context: Context) -> V { let v = V(); box.view = v; return v }
+    func updateNSView(_ v: V, context: Context) { box.view = v }
 }
 
 /// The "smoke": live blur of whatever is behind the shelf.

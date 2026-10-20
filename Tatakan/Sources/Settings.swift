@@ -17,12 +17,14 @@ final class Settings: ObservableObject {
     @Published var notchOpenOnHover: Bool { didSet { d.set(notchOpenOnHover, forKey: "notchOpenOnHover") } }
     @Published var notchMediaPeek: Bool { didSet { d.set(notchMediaPeek, forKey: "notchMediaPeek") } }
     @Published var liveActivities: Bool { didSet { d.set(liveActivities, forKey: "liveActivities") } }
+    // Look
+    @Published var aiGlow: Bool { didSet { d.set(aiGlow, forKey: "aiGlow") } }
 
     private init() {
         d.register(defaults: ["shakeEnabled": true, "shakeSensitivity": 0.5,
                               "removeAfterDrag": true, "closeWhenEmpty": true,
                               "notchEnabled": true, "notchOpenOnHover": true, "notchMediaPeek": true,
-                              "liveActivities": true])
+                              "liveActivities": true, "aiGlow": true])
         shakeEnabled = d.bool(forKey: "shakeEnabled")
         shakeSensitivity = d.double(forKey: "shakeSensitivity")
         removeAfterDrag = d.bool(forKey: "removeAfterDrag")
@@ -32,6 +34,7 @@ final class Settings: ObservableObject {
         notchOpenOnHover = d.bool(forKey: "notchOpenOnHover")
         notchMediaPeek = d.bool(forKey: "notchMediaPeek")
         liveActivities = d.bool(forKey: "liveActivities")
+        aiGlow = d.bool(forKey: "aiGlow")
     }
 
     func setLaunchAtLogin(_ on: Bool) {
@@ -82,6 +85,10 @@ struct SettingsView: View {
                 Toggle("Live activities (battery, Bluetooth, timer)", isOn: $s.liveActivities)
                     .disabled(!s.notchEnabled)
                 LabeledContent("Toggle the Nook", value: "⌃⌥N")
+            }
+            Section("Look") {
+                Toggle("Apple Intelligence glow when opening & dropping", isOn: $s.aiGlow)
+                LabeledContent("Surface", value: "Liquid Glass · black → clear")
             }
             Section("Shelf") {
                 Toggle("Open a shelf when I shake the pointer while dragging", isOn: $s.shakeEnabled)

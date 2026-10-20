@@ -7,7 +7,8 @@ import QuickLookUI
 // Space Mono labels, round icon buttons, one #F07A42 accent).
 
 enum NookTab: Int, CaseIterable { case home, tray, calendar, timer, notes
-    var label: String { ["NOOK", "TRAY", "CAL", "TIMER", "NOTES"][rawValue] }
+    var title: String { ["Home", "Tray", "Calendar", "Timer", "Notes"][rawValue] }
+    var symbol: String { ["house", "tray", "calendar", "timer", "checklist"][rawValue] }
 }
 
 enum NookState: Equatable { case closed, peek, open }
@@ -15,18 +16,23 @@ enum NookState: Equatable { case closed, peek, open }
 /// Notch-side colors (always dark, independent of system appearance).
 enum NK {
     static let bg = Color.black
-    static let card = Color.white.opacity(0.08)
-    static let card2 = Color.white.opacity(0.14)
-    static let line = Color.white.opacity(0.12)
-    static let ink = Color(white: 0.95)
-    static let mute = Color(white: 0.55)
+    static let card = Color.white.opacity(0.07)
+    static let card2 = Color.white.opacity(0.13)
+    static let line = Color.white.opacity(0.08)       // hairline around cards
+    static let line2 = Color.white.opacity(0.22)      // dashed drop targets
+    static let ink = Color.white
+    static let mute = Color.white.opacity(0.6)        // ≈ secondaryLabel on dark
+    static let faint = Color.white.opacity(0.38)      // ≈ tertiaryLabel
     static let dot = Color.white.opacity(0.16)
 }
 
 final class NookModel: ObservableObject {
     @Published var state: NookState = .closed
     @Published var tab: NookTab = .home
-    @Published var dropHover = false        // something is being dragged over the nook
+    let glow = GlowDriver()
+    @Published var dropHover = false {      // something is being dragged over the nook
+        didSet { if dropHover != oldValue { glow.hold(dropHover) } }
+    }
     @Published var hoverAirDrop = false
     @Published var activity: LiveActivity?
     var notchSize = CGSize(width: 185, height: 32)
@@ -111,11 +117,15 @@ final class NookController: NSObject, ShelfHost, QLPreviewPanelDataSource, QLPre
     private var keyMonitor: Any?
     private var screen: NSScreen
 
-    static let openSize = CGSize(width: 640, height: 214)
+    static let openSize = CGSize(width: 680, height: 240)
+    /// Transparent room around the open shape so its shadow / glass edge / glow fade out instead of
+    /// being cut by the window bounds (that cut was the visible "bounding box" at the notch sides).
+    static let margin = (side: CGFloat(44), bottom: CGFloat(52))
     /// Area (in root view coords) of the AirDrop drop zone while the nook is open.
     var airDropRect: CGRect {
-        let s = NookController.openSize
-        return CGRect(x: s.width - 18 - 132, y: 14, width: 132, height: s.height - model.notchSize.height - 36)
+        let s = NookController.openSize, m = NookController.margin
+        return CGRect(x: m.side + s.width - NookView.inset - 132, y: m.bottom + NookView.inset,
+                      width: 132, height: s.height - model.notchSize.height - 10 - NookView.inset)
     }
 
     init(screen: NSScreen) {
@@ -139,8 +149,12 @@ final class NookController: NSObject, ShelfHost, QLPreviewPanelDataSource, QLPre
         panel.ignoresMouseEvents = true        // clicks pass through until the pointer is on the notch
 
         root.controller = self
-        let host = NSHostingView(rootView: NookView(controller: self)
+        let host = NSHostingView(rootView: NookView(controller: self, glow: model.glow)
             .environmentObject(model).environmentObject(shelf))
+        // The window size is fixed and set by us. Letting SwiftUI push its ideal/min/max size into
+        // Auto Layout made macOS 27 loop in updateConstraints while the notch animates → AppKit
+        // raised and the app crashed (seen with the stock 0.3.0 build too).
+        host.sizingOptions = []
         host.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(host)
         NSLayoutConstraint.activate([
@@ -154,7 +168,7 @@ final class NookController: NSObject, ShelfHost, QLPreviewPanelDataSource, QLPre
         // Dragged files must be able to find the window even while it ignores the mouse.
         startMonitors()
         LiveActivities.shared.$current.receive(on: RunLoop.main).sink { [weak self] a in
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { self?.model.activity = a }
+            withAnimation(Motion.settle) { self?.model.activity = a }
         }.store(in: &bag)
         TimerModel.shared.onFinish = {
             LiveActivities.shared.show(LiveActivity(symbol: "timer", left: "Timer done", right: "00:00", accent: true), seconds: 6)
@@ -171,10 +185,10 @@ final class NookController: NSObject, ShelfHost, QLPreviewPanelDataSource, QLPre
         return CGSize(width: 150, height: 24)   // slim handle on notch-less displays
     }
 
-    /// Fixed window: the full open size, centered on the notch. Content draws only what's needed.
+    /// Fixed window: the full open size plus a shadow margin, centered on the notch. Content draws only what's needed.
     static func frame(for s: NSScreen) -> NSRect {
-        let size = openSize
-        return NSRect(x: s.frame.midX - size.width / 2, y: s.frame.maxY - size.height, width: size.width, height: size.height)
+        let w = openSize.width + 2 * margin.side, h = openSize.height + margin.bottom
+        return NSRect(x: s.frame.midX - w / 2, y: s.frame.maxY - h, width: w, height: h)
     }
 
     /// Screen-space rect of the currently visible shape (for hit testing).
@@ -182,12 +196,16 @@ final class NookController: NSObject, ShelfHost, QLPreviewPanelDataSource, QLPre
         let f = panel.frame
         let n = model.notchSize
         switch model.state {
-        case .open: return f
+        case .open:
+            let s = NookController.openSize
+            return NSRect(x: f.midX - s.width / 2, y: f.maxY - s.height, width: s.width, height: s.height)
         case .peek:
             let w = n.width + 120, h = n.height + 34
             return NSRect(x: f.midX - w / 2, y: f.maxY - h, width: w, height: h)
         case .closed:
-            let w = (model.activity != nil || NowPlaying.shared.playing ? n.width + 110 : n.width), h = n.height
+            let w = NookView.closedWidth(notch: n, activity: model.activity != nil,
+                                         playing: NowPlaying.shared.playing && Settings.shared.notchMediaPeek)
+            let h = n.height
             return NSRect(x: f.midX - w / 2, y: f.maxY - h, width: w, height: h)
         }
     }
@@ -230,7 +248,17 @@ final class NookController: NSObject, ShelfHost, QLPreviewPanelDataSource, QLPre
               NSEvent.pressedMouseButtons & 1 == 0 else { return }
         scheduleHover()
     }
+    /// Pointer moving inside the sensor: re-arm if an earlier attempt missed (no more wiggling).
+    func sensorMoved() { if model.state == .closed { sensorEntered() } }
     func sensorExited() { hoverWork?.cancel(); hoverWork = nil }
+
+    /// Hit test with slack. `NSRect.contains` excludes the top edge, and a pointer pushed against the
+    /// top of the screen sits exactly on `maxY`, so the strict check failed until you wiggled down.
+    private func pointerIn(_ r: NSRect, slack: CGFloat) -> Bool {
+        let p = NSEvent.mouseLocation
+        let z = r.insetBy(dx: -slack, dy: -slack)
+        return p.x >= z.minX && p.x <= z.maxX && p.y >= z.minY && p.y <= z.maxY
+    }
 
     /// Pointer entered / left the visible nook (tracking area on the panel).
     func nookEntered() { closeWork?.cancel(); closeWork = nil }
@@ -243,7 +271,7 @@ final class NookController: NSObject, ShelfHost, QLPreviewPanelDataSource, QLPre
 
     func hotZone() -> NSRect {
         let f = panel.frame, n = model.notchSize
-        let w = n.width + 20
+        let w = n.width + 40
         return NSRect(x: f.midX - w / 2, y: f.maxY - n.height - 2, width: w, height: n.height + 2)
     }
 
@@ -252,12 +280,13 @@ final class NookController: NSObject, ShelfHost, QLPreviewPanelDataSource, QLPre
         let w = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.hoverWork = nil
-            if self.hotZone().contains(NSEvent.mouseLocation), self.model.state == .closed {
+            if self.pointerIn(self.hotZone(), slack: 6), self.model.state == .closed {
                 self.set(Settings.shared.notchOpenOnHover ? .open : .peek)
             }
         }
         hoverWork = w
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: w)
+        // short intent delay: filters a pointer just passing by, still feels instant
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.09, execute: w)
     }
 
     private func scheduleClose() {
@@ -266,8 +295,7 @@ final class NookController: NSObject, ShelfHost, QLPreviewPanelDataSource, QLPre
             guard let self else { return }
             self.closeWork = nil
             guard self.model.state != .closed else { return }
-            let p = NSEvent.mouseLocation
-            if self.visibleRect().insetBy(dx: -6, dy: -6).contains(p) { return }   // came back in
+            if self.pointerIn(self.visibleRect(), slack: 6) { return }   // came back in
             if DragSourceNSView.isDraggingOut || NSEvent.pressedMouseButtons & 1 != 0 {
                 self.scheduleClose()   // still dragging: look again shortly (cheap, only while open)
                 return
@@ -283,11 +311,15 @@ final class NookController: NSObject, ShelfHost, QLPreviewPanelDataSource, QLPre
         closeWork?.cancel(); closeWork = nil
         if s == .open {
             NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
-            CalendarModel.shared.reload()
+            // EventKit fetch runs off the main thread, after the spring has mostly played
+            // (it used to block the first frames of the open animation).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { CalendarModel.shared.reload() }
             shelf.pruneDeadFiles()
         }
         if s != .open { MirrorModel.shared.stop(); panel.resignKey() }
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { model.state = s }
+        if s == .closed { model.glow.glassOff() } else { model.glow.glassAfter(s == .open ? 0.3 : 0.2) }
+        withAnimation(s == .open ? Motion.open : Motion.close) { model.state = s }
+        if s == .open { model.glow.burst() } else if s == .closed { model.glow.reset() }
         panel.ignoresMouseEvents = s == .closed
         root.trackRect = s == .closed ? .zero : panelRectInView(visibleRect())
         sensor?.place(hotZone())
@@ -394,13 +426,16 @@ final class NookSensor: NSObject {
         window.isOpaque = false
         window.hasShadow = false
         window.ignoresMouseEvents = false        // transparent but still hit-testable
+        window.acceptsMouseMovedEvents = true
         window.hidesOnDeactivate = false
         window.isReleasedWhenClosed = false
         let v = SensorView()
         v.controller = controller
         window.contentView = v
+        view = v
         window.orderFrontRegardless()
     }
+    private weak var view: SensorView?
 
     func place(_ r: NSRect) {
         guard let c = controller else { return }
@@ -408,6 +443,10 @@ final class NookSensor: NSObject {
         if c.model.state == .closed {
             window.setFrame(r, display: false)
             window.orderFrontRegardless()
+            // The sensor was hidden while the pointer was inside it, so it never got mouseExited and
+            // still thinks the pointer is in: the next approach sent no mouseEntered and hover-open
+            // worked only once (after that you had to click). Fresh tracking area = fresh state.
+            view?.rearm()
         } else {
             window.orderOut(nil)
         }
@@ -426,13 +465,17 @@ final class SensorView: NSView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
+        rearm()
+    }
+    func rearm() {
         if let area { removeTrackingArea(area) }
-        let a = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
+        let a = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
         addTrackingArea(a); area = a
     }
     override func hitTest(_ point: NSPoint) -> NSView? { bounds.contains(convert(point, from: superview)) ? self : nil }
     override func mouseEntered(with event: NSEvent) { controller?.sensorEntered() }
     override func mouseExited(with event: NSEvent) { controller?.sensorExited() }
+    override func mouseMoved(with event: NSEvent) { controller?.sensorMoved() }
     override func mouseDown(with event: NSEvent) { controller?.open(tab: controller?.model.tab ?? .home) }
 
     // A file dragged onto the notch: open the nook; the panel takes over the drag from there.
@@ -478,8 +521,19 @@ struct NotchShape: Shape {
 struct NookView: View {
     let controller: NookController
     @EnvironmentObject var model: NookModel
+    @ObservedObject var glow: GlowDriver
     @EnvironmentObject var shelf: Shelf
     @ObservedObject var media = NowPlaying.shared
+
+    /// Content inset inside the open panel. ≥ panel corner (28) − card corner (16) so cards stay
+    /// concentric with the glass instead of being squeezed into its corners.
+    static let inset: CGFloat = 18
+
+    /// Width added on each side of the notch while the closed island shows music / an activity.
+    static func wing(activity: Bool) -> CGFloat { activity ? 84 : 40 }
+    static func closedWidth(notch n: CGSize, activity: Bool, playing: Bool) -> CGFloat {
+        activity || playing ? n.width + 2 * wing(activity: activity) : n.width
+    }
 
     private var size: CGSize {
         let n = model.notchSize
@@ -487,27 +541,41 @@ struct NookView: View {
         case .open: return NookController.openSize
         case .peek: return CGSize(width: n.width + 120, height: n.height + 34)
         case .closed:
-            let wide = model.activity != nil || (media.playing && Settings.shared.notchMediaPeek)
-            return CGSize(width: wide ? n.width + 110 : n.width, height: n.height)
+            let w = Self.closedWidth(notch: n, activity: model.activity != nil,
+                                     playing: media.playing && Settings.shared.notchMediaPeek)
+            return CGSize(width: w, height: n.height)
         }
+    }
+
+    private var isOpen: Bool { model.state == .open }
+    private var shape: NotchShape {
+        NotchShape(topRadius: isOpen ? 12 : 6, bottomRadius: isOpen ? 28 : (model.state == .peek ? 16 : 10))
     }
 
     var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
-                NotchShape(topRadius: model.state == .open ? 10 : 6, bottomRadius: model.state == .open ? 26 : 10)
-                    .fill(NK.bg)
-                    .shadow(color: .black.opacity(model.state == .open ? 0.45 : 0), radius: 14, y: 6)
+                // Closed = pure black (one piece with the hardware notch). Peek/open = Liquid Glass,
+                // black across the notch band, fading to clear glass towards the bottom.
+                LiquidSurface(shape: shape, glass: model.state != .closed && glow.glassReady,
+                              solid: min(1, model.notchSize.height / max(size.height, 1)),
+                              veil: model.state == .closed ? 1 : (glow.glassReady ? 0 : 0.82))
+                    .shadow(color: .black.opacity(isOpen ? 0.32 : 0), radius: 22, y: 12)
+                AIBloom(driver: model.glow).mask(shape)
                 content
-                    .padding(.horizontal, model.state == .open ? 10 : 6)   // inside the flare
-                    .clipped()
+                    .clipShape(shape)
+                AIGlowRim(shape: shape, driver: model.glow)
             }
             .frame(width: size.width, height: size.height)
-            // No outline on the notch itself while dragging: only the box under the pointer lights up.
+            // one curve for every resize: open/close, music starting/stopping, live activities
+            .animation(isOpen ? Motion.open : Motion.settle, value: size)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .environment(\.colorScheme, .dark)
+        // Non-activating panel: render controls as active all the time (otherwise glass, accent and
+        // selection look dimmed until the panel is clicked and becomes key). Behaviour unchanged.
+        .environment(\.controlActiveState, .key)
         .onTapGesture { if model.state != .open { controller.set(.open) } }
     }
 
@@ -520,7 +588,7 @@ struct NookView: View {
     }
 }
 
-// MARK: - Closed: live activity / now playing around the notch
+// MARK: - Closed: live activity / now playing around the notch (Dynamic Island style)
 
 struct ClosedStrip: View {
     @EnvironmentObject var model: NookModel
@@ -529,22 +597,30 @@ struct ClosedStrip: View {
     var body: some View {
         HStack(spacing: 0) {
             if let a = model.activity {
-                HStack(spacing: 6) {
-                    Image(systemName: a.symbol).font(.system(size: 11, weight: .semibold))
+                let w = NookView.wing(activity: true) - 14
+                HStack(spacing: 5) {
+                    Image(systemName: a.symbol).font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(a.accent ? PT.accent : NK.ink)
-                    Text(a.left).font(PT.ui(11, 600)).foregroundStyle(NK.ink).lineLimit(1)
+                        .symbolEffect(.pulse, options: .nonRepeating, value: a)
+                    Text(a.left).font(.system(size: 11, weight: .semibold)).foregroundStyle(NK.ink).lineLimit(1)
                 }
-                .frame(width: 100, alignment: .leading)
-                Spacer(minLength: model.notchSize.width - 30)
-                Text(a.right).font(PT.dot(14)).foregroundStyle(a.accent ? PT.accent : NK.ink).lineLimit(1)
-                    .frame(width: 60, alignment: .trailing)
-            } else if media.playing && Settings.shared.notchMediaPeek {
-                Artwork(size: 20, radius: 5)
+                .frame(width: w, alignment: .leading)
+                .transition(.island)
                 Spacer(minLength: 0)
-                Equalizer(active: media.playing).frame(width: 22, height: 14)
+                Text(a.right).font(.system(size: 12, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(a.accent ? PT.accent : NK.ink).lineLimit(1)
+                    .contentTransition(.numericText())
+                    .frame(width: w, alignment: .trailing)
+                    .transition(.island)
+            } else if media.playing && Settings.shared.notchMediaPeek {
+                Artwork(size: 22, radius: 6).transition(.island)
+                Spacer(minLength: 0)
+                Equalizer(active: media.playing, tint: NSColor(media.tint))
+                    .frame(width: 20, height: 14)
+                    .transition(.island)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 9)
         .frame(maxHeight: .infinity)
         .transition(.opacity)
     }
@@ -561,19 +637,20 @@ struct PeekView: View {
             Spacer(minLength: model.notchSize.height)
             HStack(spacing: 8) {
                 if media.hasMedia {
-                    Artwork(size: 18, radius: 4)
-                    Text(media.title).font(PT.ui(11, 600)).foregroundStyle(NK.ink).lineLimit(1)
+                    Artwork(size: 18, radius: 5)
+                    Text(media.title).font(.system(size: 12, weight: .semibold)).foregroundStyle(NK.ink).lineLimit(1)
                 } else {
-                    Text("TATAKAN").font(PT.dot(13)).tracking(1).foregroundStyle(NK.ink)
+                    Text("Tatakan").font(.system(size: 12, weight: .semibold)).foregroundStyle(NK.ink)
                 }
                 Spacer(minLength: 0)
                 if !shelf.items.isEmpty {
-                    Text(PT.n2(shelf.items.count)).font(PT.dot(13)).foregroundStyle(PT.accent)
+                    Label("\(shelf.items.count)", systemImage: "tray.full").font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(NK.mute)
                 }
             }
             .padding(.horizontal, 18).padding(.bottom, 9)
         }
-        .transition(.opacity)
+        .transition(.aiReveal)
     }
 }
 
@@ -583,22 +660,23 @@ struct OpenView: View {
     let controller: NookController
     @EnvironmentObject var model: NookModel
     @EnvironmentObject var shelf: Shelf
+    @Namespace private var ns
 
     var body: some View {
         VStack(spacing: 0) {
             // Row on either side of the hardware notch: tabs left, tools right.
             HStack(spacing: 0) {
-                HStack(spacing: 2) {
-                    ForEach([NookTab.home, .tray, .calendar], id: \.self) { tabButton($0) }
-                }
+                HStack(spacing: 2) { ForEach([NookTab.home, .tray, .calendar], id: \.self) { tabButton($0) } }
                 Spacer(minLength: model.notchSize.width + 8)
                 HStack(spacing: 2) {
                     ForEach([NookTab.timer, .notes], id: \.self) { tabButton($0) }
-                    NKRound(symbol: "gearshape", help: "Settings") { NSApp.sendAction(#selector(AppDelegate.openSettingsAction), to: nil, from: nil) }
+                    IconButton(symbol: "gearshape", help: "Settings") {
+                        NSApp.sendAction(#selector(AppDelegate.openSettingsAction), to: nil, from: nil)
+                    }
                 }
             }
             .frame(height: model.notchSize.height)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, NookView.inset - 2)
 
             Group {
                 switch model.tab {
@@ -609,32 +687,42 @@ struct OpenView: View {
                 case .notes: NotesTab(controller: controller)
                 }
             }
-            .padding(.horizontal, 14).padding(.top, 6).padding(.bottom, 14)
+            .id(model.tab)
+            .transition(.tabSwap)
+            .padding(.horizontal, NookView.inset).padding(.top, 10).padding(.bottom, NookView.inset)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+        .transition(.aiReveal)
     }
 
+    /// Native segmented look: SF Symbol tabs, the selection is a Liquid Glass lens that slides.
     private func tabButton(_ t: NookTab) -> some View {
         let on = model.tab == t
-        return Button { withAnimation(.easeOut(duration: 0.15)) { model.tab = t } } label: {
+        return Button { withAnimation(Motion.snappy) { model.tab = t } } label: {
             HStack(spacing: 4) {
-                Text(t.label).font(PT.mono(9.5)).tracking(1)
+                Image(systemName: t.symbol).font(.system(size: 12.5, weight: .medium))
                 if t == .tray && !shelf.items.isEmpty {
-                    Text(PT.n2(shelf.items.count)).font(PT.mono(9.5, bold: true))
-                        .foregroundStyle(on ? PT.accent : PT.accent.opacity(0.9))
+                    Text("\(shelf.items.count)").font(.system(size: 11, weight: .semibold).monospacedDigit())
+                        .contentTransition(.numericText())
                 }
             }
-            .foregroundStyle(on ? Color.black : NK.mute)
-            .padding(.horizontal, 9).padding(.vertical, 4)
-            .background(Capsule().fill(on ? NK.ink : .clear))
+            .foregroundStyle(on ? NK.ink : NK.mute)
+            .padding(.horizontal, 10).frame(height: 26)
+            .background {
+                if on {
+                    Color.clear
+                        .interactiveGlassCapsule()
+                        .matchedGeometryEffect(id: "tab", in: ns)
+                }
+            }
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressScale())
+        .help(t.title)
     }
 }
 
-// MARK: Home: media + tray strip + next event
+// MARK: Home: media + next event + tray
 
 struct HomeTab: View {
     let controller: NookController
@@ -643,35 +731,41 @@ struct HomeTab: View {
     @ObservedObject var cal = CalendarModel.shared
 
     var body: some View {
-        HStack(spacing: 10) {
-            MediaCard().frame(width: 300)
-            VStack(spacing: 10) {
+        HStack(spacing: 12) {
+            MediaCard().frame(width: 320)
+            VStack(spacing: 12) {
                 NKCard {
                     VStack(alignment: .leading, spacing: 6) {
                         NKLabel(Self.dateLabel)
                         if let e = cal.events.first(where: { ($0.endDate ?? .distantPast) > Date() }) {
-                            HStack(spacing: 6) {
-                                Capsule().fill(Color(nsColor: e.calendar.color)).frame(width: 3, height: 26)
+                            HStack(spacing: 8) {
+                                Capsule().fill(Color(nsColor: e.calendar.color)).frame(width: 3, height: 28)
                                 VStack(alignment: .leading, spacing: 1) {
-                                    Text(e.title ?? "Event").font(PT.ui(12, 600)).foregroundStyle(NK.ink).lineLimit(1)
+                                    Text(e.title ?? "Event").font(.system(size: 13, weight: .semibold)).foregroundStyle(NK.ink).lineLimit(1)
                                     NKLabel(e.isAllDay ? "All day" : Self.time.string(from: e.startDate))
                                 }
                             }
+                            .transition(.opacity)
                         } else {
-                            Text(cal.granted ? "Nothing else today" : "Calendar off").font(PT.ui(12, 500)).foregroundStyle(NK.mute)
+                            Text(cal.granted ? "Nothing else today" : "Calendar off")
+                                .font(.system(size: 13, weight: .medium)).foregroundStyle(NK.mute)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .animation(Motion.quick, value: cal.events.count)
                 }
-                .onTapGesture { model.tab = .calendar }
+                .contentShape(Rectangle())
+                .onTapGesture { withAnimation(Motion.snappy) { model.tab = .calendar } }
                 TrayMini(controller: controller)
-                    .onTapGesture { model.tab = .tray }
+                    .contentShape(Rectangle())
+                    .onTapGesture { withAnimation(Motion.snappy) { model.tab = .tray } }
             }
         }
     }
 
     static let time: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm"; return f }()
-    static var dateLabel: String { let f = DateFormatter(); f.dateFormat = "EEE d MMM"; return f.string(from: Date()) }
+    private static let dateFmt: DateFormatter = { let f = DateFormatter(); f.setLocalizedDateFormatFromTemplate("EEEE d MMM"); return f }()
+    static var dateLabel: String { dateFmt.string(from: Date()) }
 }
 
 struct TrayMini: View {
@@ -680,69 +774,74 @@ struct TrayMini: View {
     @EnvironmentObject var model: NookModel
     var body: some View {
         NKCard(highlight: model.dropHover) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 if shelf.items.isEmpty {
-                    Image(systemName: "tray.and.arrow.down").font(.system(size: 13, weight: .semibold)).foregroundStyle(model.dropHover ? PT.accent : NK.mute)
-                    NKLabel(model.dropHover ? "Release to keep" : "Drop files here")
+                    Image(systemName: "tray.and.arrow.down").font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(model.dropHover ? PT.accent : NK.mute)
+                        .symbolEffect(.bounce, value: model.dropHover)
+                    Text(model.dropHover ? "Release to keep" : "Drop files here")
+                        .font(.system(size: 12, weight: .medium)).foregroundStyle(NK.mute)
                 } else {
                     HStack(spacing: -10) {
-                        ForEach(shelf.items.suffix(3)) { Thumb(item: $0, size: 24) }
+                        ForEach(shelf.items.suffix(3)) { Thumb(item: $0, size: 26) }
                     }
-                    NKLabel("\(PT.n2(shelf.items.count)) in tray")
+                    Text("\(shelf.items.count) in Tray").font(.system(size: 12, weight: .medium)).foregroundStyle(NK.mute)
+                        .contentTransition(.numericText())
                 }
                 Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(NK.faint)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
 
+// MARK: Now playing (Control Center style)
+
 struct MediaCard: View {
     @ObservedObject var media = NowPlaying.shared
     @StateObject private var scrub = ScrubState()
 
     var body: some View {
-        NKCard {
+        NKCard(padding: 14) {
             if media.hasMedia {
-                HStack(spacing: 12) {
-                    Artwork(size: 76, radius: 12)
-                    VStack(alignment: .leading, spacing: 6) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(media.title).font(PT.ui(13, 700)).foregroundStyle(NK.ink).lineLimit(1)
-                            Text(media.artist).font(PT.ui(11, 500)).foregroundStyle(NK.mute).lineLimit(1)
-                        }
-                        TimelineView(.periodic(from: .now, by: 0.5)) { ctx in
-                            let pos = scrub.value ?? media.position(at: ctx.date)
-                            VStack(spacing: 3) {
-                                ProgressPill(value: media.duration > 0 ? pos / media.duration : 0) { f in
-                                    scrub.value = f * media.duration
-                                } onEnd: { f in
-                                    media.seek(f * media.duration); scrub.value = nil
-                                }
-                                HStack {
-                                    Text(Self.fmt(pos)).font(PT.mono(9)).foregroundStyle(NK.mute)
-                                    Spacer()
-                                    Text("-" + Self.fmt(max(0, media.duration - pos))).font(PT.mono(9)).foregroundStyle(NK.mute)
-                                }
+                HStack(spacing: 14) {
+                    // Artwork breathes with playback: full size + coloured glow while playing.
+                    Artwork(size: 84, radius: 12)
+                        .scaleEffect(media.playing ? 1 : 0.9)
+                        .shadow(color: media.tint.opacity(media.playing ? 0.45 : 0), radius: 18, y: 6)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(media.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(NK.ink).lineLimit(1)
+                            .id(media.title).transition(.tabSwap)
+                        Text(media.artist.isEmpty ? media.appName : media.artist)
+                            .font(.system(size: 12)).foregroundStyle(NK.mute).lineLimit(1)
+                            .id(media.artist).transition(.tabSwap)
+                        Spacer(minLength: 6)
+                        ProgressRow(scrub: scrub)
+                        Spacer(minLength: 4)
+                        HStack(spacing: 2) {
+                            TransportButton(symbol: "backward.fill", size: 14, help: "Previous") { media.previous() }
+                            TransportButton(symbol: media.playing ? "pause.fill" : "play.fill", size: 21, help: "Play/Pause") { media.toggle() }
+                            TransportButton(symbol: "forward.fill", size: 14, help: "Next") { media.next() }
+                            Spacer(minLength: 0)
+                            if !media.appName.isEmpty && !media.artist.isEmpty {   // else it's already the subtitle
+                                Text(media.appName).font(.system(size: 11, weight: .medium)).foregroundStyle(NK.faint).lineLimit(1)
                             }
                         }
-                        HStack(spacing: 8) {
-                            NKRound(symbol: "backward.fill", help: "Previous") { media.previous() }
-                            NKRound(symbol: media.playing ? "pause.fill" : "play.fill", help: "Play/Pause", primary: true) { media.toggle() }
-                            NKRound(symbol: "forward.fill", help: "Next") { media.next() }
-                            Spacer(minLength: 0)
-                            if !media.appName.isEmpty { NKLabel(media.appName) }
-                        }
+                        .padding(.leading, -8)
                     }
+                    .animation(Motion.quick, value: media.title)
                 }
+                .animation(Motion.settle, value: media.playing)
             } else {
-                HStack(spacing: 12) {
+                HStack(spacing: 14) {
                     RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NK.card2)
-                        .frame(width: 76, height: 76)
-                        .overlay(Image(systemName: "music.note").font(.system(size: 22, weight: .light)).foregroundStyle(NK.mute))
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("NO MUSIC").font(PT.dot(18)).tracking(1).foregroundStyle(NK.ink)
-                        NKLabel("Play something in Spotify, Music or a browser")
+                        .frame(width: 84, height: 84)
+                        .overlay(Image(systemName: "music.note").font(.system(size: 26, weight: .light)).foregroundStyle(NK.mute))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Not Playing").font(.system(size: 15, weight: .semibold)).foregroundStyle(NK.ink)
+                        Text("Play something in Music, Spotify or a browser")
+                            .font(.system(size: 12)).foregroundStyle(NK.mute).lineLimit(2)
                     }
                     Spacer(minLength: 0)
                 }
@@ -759,23 +858,76 @@ struct MediaCard: View {
 
 final class ScrubState: ObservableObject { @Published var value: Double? }
 
+/// Scrubber + times. Redraws per frame only while playing (smooth, not 2 Hz jumps), paused otherwise.
+struct ProgressRow: View {
+    @ObservedObject var media = NowPlaying.shared
+    @ObservedObject var scrub: ScrubState
+    @StateObject private var hv = HoverBox()
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !media.playing || scrub.value != nil)) { ctx in
+            let pos = scrub.value ?? media.position(at: ctx.date)
+            VStack(spacing: 4) {
+                ProgressPill(value: media.duration > 0 ? pos / media.duration : 0, thick: hv.on || scrub.value != nil) { f in
+                    scrub.value = f * media.duration
+                } onEnd: { f in
+                    media.seek(f * media.duration); scrub.value = nil
+                }
+                HStack {
+                    Text(MediaCard.fmt(pos))
+                    Spacer()
+                    Text("-" + MediaCard.fmt(max(0, media.duration - pos)))
+                }
+                .font(.system(size: 10, weight: .medium).monospacedDigit()).foregroundStyle(NK.faint)
+            }
+        }
+        .onHover { h in withAnimation(Motion.quick) { hv.on = h } }
+    }
+}
+
 struct ProgressPill: View {
     var value: Double
+    var thick = false
     var onChange: (Double) -> Void
     var onEnd: (Double) -> Void
     var body: some View {
         GeometryReader { g in
-            let w = g.size.width
+            let w = g.size.width, h: CGFloat = thick ? 7 : 4
             ZStack(alignment: .leading) {
                 Capsule().fill(NK.card2)
-                Capsule().fill(NK.ink).frame(width: max(4, w * min(max(value, 0), 1)))
+                Capsule().fill(NK.ink).frame(width: max(h, w * min(max(value, 0), 1)))
             }
+            .frame(height: h)
+            .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { onChange(min(max($0.location.x / w, 0), 1)) }
                 .onEnded { onEnd(min(max($0.location.x / w, 0), 1)) })
         }
-        .frame(height: 5)
+        .frame(height: 9)
+    }
+}
+
+/// Plain SF Symbol transport control (like Control Center): hover halo, press squish,
+/// play ↔ pause morphs with the symbol replace effect.
+struct TransportButton: View {
+    let symbol: String
+    var size: CGFloat
+    var help = ""
+    let action: () -> Void
+    @StateObject private var hv = HoverBox()
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: size, weight: .semibold))
+                .contentTransition(.symbolEffect(.replace))
+                .foregroundStyle(NK.ink)
+                .frame(width: size + 18, height: size + 16)
+                .background(Circle().fill(Color.white.opacity(hv.on ? 0.12 : 0)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(PressScale())
+        .onHover { h in withAnimation(Motion.quick) { hv.on = h } }
+        .help(help)
     }
 }
 
@@ -784,11 +936,14 @@ struct Artwork: View {
     var radius: CGFloat
     @ObservedObject var media = NowPlaying.shared
     var body: some View {
-        Group {
+        ZStack {
             if let a = media.art {
                 Image(nsImage: a).resizable().aspectRatio(contentMode: .fill)
+                    .id(ObjectIdentifier(a))                 // cross-fade on track change
+                    .transition(.opacity)
             } else {
                 NK.card2.overlay(Image(systemName: "music.note").font(.system(size: size * 0.4)).foregroundStyle(NK.mute))
+                    .transition(.opacity)
             }
         }
         .frame(width: size, height: size)
@@ -800,21 +955,24 @@ struct Artwork: View {
 /// Core Animation runs the bars in the window server, so the app itself stays idle (no per-frame SwiftUI work).
 struct Equalizer: NSViewRepresentable {
     var active: Bool
+    var tint: NSColor = .white
     func makeNSView(context: Context) -> EqualizerView { EqualizerView() }
-    func updateNSView(_ v: EqualizerView, context: Context) { v.setActive(active) }
+    func updateNSView(_ v: EqualizerView, context: Context) { v.setTint(tint); v.setActive(active) }
 }
 
 final class EqualizerView: NSView {
     private var bars: [CALayer] = []
     private var isActive = false
+    private static let rest: CGFloat = 0.28
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
         for _ in 0..<4 {
             let b = CALayer()
-            b.backgroundColor = NSColor(hex: 0xF07A42).cgColor
+            b.backgroundColor = NSColor.white.cgColor
             b.cornerRadius = 1.5
+            b.transform = CATransform3DMakeScale(1, Self.rest, 1)
             layer?.addSublayer(b)
             bars.append(b)
         }
@@ -823,7 +981,7 @@ final class EqualizerView: NSView {
 
     override func layout() {
         super.layout()
-        let w: CGFloat = 3, gap: CGFloat = 2, h = bounds.height
+        let w: CGFloat = 3, gap: CGFloat = 2.5, h = bounds.height
         let total = CGFloat(bars.count) * w + CGFloat(bars.count - 1) * gap
         var x = (bounds.width - total) / 2
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -833,7 +991,16 @@ final class EqualizerView: NSView {
             x += w + gap
         }
         CATransaction.commit()
-        if isActive { start() }
+        // Only (re)start when missing: restarting on every layout pass made the bars jump.
+        if isActive && window != nil && bars.first?.animation(forKey: "eq") == nil { start() }
+    }
+
+    func setTint(_ c: NSColor) {
+        let cg = c.cgColor
+        guard bars.first?.backgroundColor != cg else { return }
+        CATransaction.begin(); CATransaction.setAnimationDuration(0.6)
+        bars.forEach { $0.backgroundColor = cg }       // implicit, cross-fades with the artwork
+        CATransaction.commit()
     }
 
     func setActive(_ on: Bool) {
@@ -842,24 +1009,33 @@ final class EqualizerView: NSView {
         on ? start() : stop()
     }
 
+    /// Each bar loops a different smooth curve that starts and ends at rest, so the loop seam and
+    /// the start from silence are invisible.
     private func start() {
         for (i, b) in bars.enumerated() {
-            b.removeAnimation(forKey: "eq")
+            var vals: [CGFloat] = [Self.rest]
+            for _ in 0..<6 { vals.append(.random(in: 0.35...1.0)) }
+            vals.append(Self.rest)
             let a = CAKeyframeAnimation(keyPath: "transform.scale.y")
-            a.values = [0.35, 1.0, 0.5, 0.85, 0.3, 0.7, 0.35].map { NSNumber(value: $0) }
-            a.duration = 0.9 + Double(i) * 0.17
-            a.repeatCount = .infinity
-            a.autoreverses = true
-            a.timeOffset = Double(i) * 0.23
+            a.values = vals.map { NSNumber(value: Double($0)) }
             a.calculationMode = .cubic
+            a.duration = 2.2 + Double(i) * 0.37
+            a.repeatCount = .infinity
+            a.beginTime = CACurrentMediaTime() + Double(i) * 0.06
+            a.fillMode = .backwards
             b.add(a, forKey: "eq")
         }
     }
 
+    /// Settle from wherever each bar is to rest instead of snapping.
     private func stop() {
         for b in bars {
+            let now = (b.presentation()?.value(forKeyPath: "transform.scale.y") as? CGFloat) ?? Self.rest
             b.removeAnimation(forKey: "eq")
-            b.transform = CATransform3DMakeScale(1, 0.3, 1)
+            let s = CABasicAnimation(keyPath: "transform.scale.y")
+            s.fromValue = now; s.toValue = Self.rest
+            s.duration = 0.35; s.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            b.add(s, forKey: "settle")
         }
     }
 
@@ -879,23 +1055,15 @@ struct TrayTab: View {
     @ObservedObject var settings = Settings.shared
 
     var body: some View {
-        HStack(spacing: 10) {
-            NKCard(highlight: model.dropHover && !model.hoverAirDrop, padding: 8) {
+        HStack(spacing: 12) {
+            NKCard(highlight: model.dropHover && !model.hoverAirDrop, padding: 10) {
                 if shelf.items.isEmpty {
-                    ZStack {
-                        NKDotGrid(active: model.dropHover && !model.hoverAirDrop)
-                        VStack(spacing: 4) {
-                            Text("DROP").font(PT.dot(26)).tracking(2)
-                                .foregroundStyle(model.dropHover && !model.hoverAirDrop ? PT.accent : NK.ink)
-                            NKLabel("Files stay here until you take them")
-                        }
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(NK.bg))
-                    }
+                    DropZone(active: model.dropHover && !model.hoverAirDrop,
+                             title: "Drop files here", subtitle: "They stay until you take them")
                 } else {
                     VStack(spacing: 6) {
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
+                            HStack(spacing: 6) {
                                 ForEach(shelf.items) { item in
                                     TrayTile(item: item, selected: shelf.selection.contains(item.id))
                                         .overlay(DragSource(items: { dragSet(item) },
@@ -906,13 +1074,18 @@ struct TrayTab: View {
                                                                 return ItemMenu.build(for: shelf.targets, controller: controller)
                                                             },
                                                             onEnded: { op in afterDrag(dragSet(item), op) }))
+                                        .transition(.scale(scale: 0.7).combined(with: .opacity))
                                 }
                             }
                             .padding(2)
+                            .animation(Motion.settle, value: shelf.items.map(\.id))
                         }
                         HStack(spacing: 6) {
-                            NKLabel(shelf.status ?? (shelf.selection.isEmpty ? "\(PT.n2(shelf.items.count)) items · drag out or ⌘-click" : "\(PT.n2(shelf.selection.count)) selected"),
-                                    color: shelf.status != nil ? NK.ink : NK.mute)
+                            Text(shelf.status ?? (shelf.selection.isEmpty ? "\(shelf.items.count) items · drag out, ⌘-click to select"
+                                                                          : "\(shelf.selection.count) selected"))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(shelf.status != nil ? NK.ink : NK.mute).lineLimit(1)
+                                .contentTransition(.numericText())
                             Spacer()
                             NKRound(symbol: "doc.on.clipboard", help: "Paste") { Actions.paste(into: shelf); controller.saveTray() }
                             NKShare(shelf: shelf)
@@ -920,8 +1093,9 @@ struct TrayTab: View {
                                 let m = ItemMenu.build(for: shelf.targets, controller: controller)
                                 m.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
                             }
-                            NKRound(symbol: "trash", help: "Clear tray") { controller.close() }
+                            NKRound(symbol: "trash", help: "Clear tray") { withAnimation(Motion.settle) { controller.close() } }
                         }
+                        .padding(.horizontal, 4)
                     }
                 }
             }
@@ -930,42 +1104,70 @@ struct TrayTab: View {
             }
             .frame(width: 132)
         }
-        .onChange(of: shelf.items) { _ in controller.saveTray() }
+        .onChange(of: shelf.items) { _, _ in controller.saveTray() }
     }
 
     private func dragSet(_ item: ShelfItem) -> [ShelfItem] {
         shelf.selection.contains(item.id) ? shelf.items.filter { shelf.selection.contains($0.id) } : [item]
     }
     private func click(_ item: ShelfItem, _ mods: NSEvent.ModifierFlags) {
-        if mods.contains(.command) || mods.contains(.shift) {
-            if shelf.selection.contains(item.id) { shelf.selection.remove(item.id) } else { shelf.selection.insert(item.id) }
-        } else {
-            shelf.selection = shelf.selection == [item.id] ? [] : [item.id]
+        withAnimation(Motion.quick) {
+            if mods.contains(.command) || mods.contains(.shift) {
+                if shelf.selection.contains(item.id) { shelf.selection.remove(item.id) } else { shelf.selection.insert(item.id) }
+            } else {
+                shelf.selection = shelf.selection == [item.id] ? [] : [item.id]
+            }
         }
         controller.panel.makeKey()
     }
     private func afterDrag(_ items: [ShelfItem], _ op: NSDragOperation) {
         guard op != [] else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            shelf.pruneDeadFiles()
-            if settings.removeAfterDrag { shelf.remove(Set(items.map(\.id))) }
+            withAnimation(Motion.settle) {
+                shelf.pruneDeadFiles()
+                if settings.removeAfterDrag { shelf.remove(Set(items.map(\.id))) }
+            }
             controller.saveTray()
         }
     }
 }
 
+/// Finder-style icon tile: grey plate around the icon + accent capsule behind the name when selected.
 struct TrayTile: View {
     let item: ShelfItem
     let selected: Bool
     var body: some View {
-        VStack(spacing: 5) {
-            Thumb(item: item, size: 52)
-                .frame(width: 64, height: 58)
-            Text(item.title).font(PT.ui(10, 600)).foregroundStyle(selected ? Color.black : NK.ink)
-                .lineLimit(1).truncationMode(.middle).frame(width: 70)
+        VStack(spacing: 4) {
+            Thumb(item: item, size: 50)
+                .frame(width: 62, height: 58)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(selected ? 0.16 : 0)))
+            Text(item.title).font(.system(size: 10.5, weight: .medium)).foregroundStyle(NK.ink)
+                .lineLimit(1).truncationMode(.middle)
+                .padding(.horizontal, 5).padding(.vertical, 1)
+                .background(Capsule().fill(selected ? PT.accent : .clear))
+                .frame(width: 74)
         }
-        .padding(.horizontal, 4).padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(selected ? NK.ink : NK.card))
+        .padding(.vertical, 3)
+    }
+}
+
+/// Native dashed drop target.
+struct DropZone: View {
+    var active: Bool
+    var title: String
+    var subtitle: String
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "tray.and.arrow.down").font(.system(size: 22, weight: .regular))
+                .foregroundStyle(active ? PT.accent : NK.mute)
+                .symbolEffect(.bounce, value: active)
+            Text(active ? "Release to keep" : title).font(.system(size: 13, weight: .semibold)).foregroundStyle(NK.ink)
+            Text(subtitle).font(.system(size: 11)).foregroundStyle(NK.mute)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .strokeBorder(active ? PT.accent : NK.line2, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])))
+        .animation(Motion.quick, value: active)
     }
 }
 
@@ -976,17 +1178,18 @@ struct AirDropZone: View {
         Button(action: action) {
             VStack(spacing: 8) {
                 AirDropGlyph(size: 30).foregroundStyle(hover ? PT.accent : NK.ink)
-                Text("AIRDROP").font(PT.mono(9.5)).tracking(1).foregroundStyle(hover ? PT.accent : NK.mute)
+                    .symbolEffect(.bounce, value: hover)
+                Text("AirDrop").font(.system(size: 12, weight: .semibold)).foregroundStyle(hover ? PT.accent : NK.mute)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(hover ? PT.accent.opacity(0.14) : NK.card))
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(hover ? PT.accent.opacity(0.18) : NK.card))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(hover ? PT.accent : NK.line, style: StrokeStyle(lineWidth: 1, dash: hover ? [] : [4, 3])))
+                .strokeBorder(hover ? PT.accent : NK.line2, style: StrokeStyle(lineWidth: hover ? 1.5 : 1, dash: hover ? [] : [5, 4])))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressScale())
         .help("Drop files here to AirDrop · or click to AirDrop the tray")
-        .animation(.easeOut(duration: 0.12), value: hover)
+        .animation(Motion.quick, value: hover)
     }
 }
 
@@ -996,42 +1199,40 @@ struct CalendarTab: View {
     @ObservedObject var cal = CalendarModel.shared
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             NKCard {
-                VStack(alignment: .leading, spacing: 4) {
-                    NKLabel(Self.month.string(from: cal.day))
-                    Text(Self.dayNum.string(from: cal.day)).font(PT.dot(46)).foregroundStyle(NK.ink)
-                    Text(Self.weekday.string(from: cal.day).uppercased()).font(PT.mono(10)).tracking(1)
-                        .foregroundStyle(Calendar.current.isDateInToday(cal.day) ? PT.accent : NK.mute)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(Self.month.string(from: cal.day)).font(.system(size: 12, weight: .medium)).foregroundStyle(NK.mute)
+                    Text(Self.dayNum.string(from: cal.day)).font(.system(size: 44, weight: .semibold, design: .rounded).monospacedDigit())
+                        .foregroundStyle(Calendar.current.isDateInToday(cal.day) ? PT.accent : NK.ink)
+                        .contentTransition(.numericText())
+                    Text(Self.weekday.string(from: cal.day)).font(.system(size: 13, weight: .semibold)).foregroundStyle(NK.ink)
                     Spacer(minLength: 0)
                     HStack(spacing: 6) {
-                        NKRound(symbol: "chevron.left", help: "Previous day") { cal.shift(-1) }
-                        NKRound(symbol: "circle.fill", help: "Today") {
-                            cal.day = Calendar.current.startOfDay(for: Date()); cal.reload()
+                        NKRound(symbol: "chevron.left", help: "Previous day") { withAnimation(Motion.snappy) { cal.shift(-1) } }
+                        NKRound(symbol: "smallcircle.filled.circle", help: "Today") {
+                            withAnimation(Motion.snappy) { cal.day = Calendar.current.startOfDay(for: Date()) }; cal.reload()
                         }
-                        NKRound(symbol: "chevron.right", help: "Next day") { cal.shift(1) }
+                        NKRound(symbol: "chevron.right", help: "Next day") { withAnimation(Motion.snappy) { cal.shift(1) } }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
-            .frame(width: 150)
+            .frame(width: 160)
 
             NKCard {
                 if !cal.granted {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("CALENDAR").font(PT.dot(18)).tracking(1).foregroundStyle(NK.ink)
-                        NKLabel("Allow access to show today's events")
-                        Button { cal.request() } label: {
-                            Text("Allow").font(PT.ui(11, 700)).foregroundStyle(.black)
-                                .padding(.horizontal, 14).padding(.vertical, 6)
-                                .background(Capsule().fill(PT.accent))
-                        }.buttonStyle(.plain)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Calendar").font(.system(size: 15, weight: .semibold)).foregroundStyle(NK.ink)
+                        Text("Allow access to show your events here.").font(.system(size: 12)).foregroundStyle(NK.mute)
+                        Button("Allow Access") { cal.request() }
+                            .prominentGlassButton().controlSize(.small).padding(.top, 4)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 } else if cal.events.isEmpty {
                     VStack(spacing: 4) {
-                        Text("FREE").font(PT.dot(26)).tracking(2).foregroundStyle(NK.ink)
-                        NKLabel("No events this day")
+                        Image(systemName: "calendar").font(.system(size: 22, weight: .regular)).foregroundStyle(NK.mute)
+                        Text("No Events").font(.system(size: 13, weight: .semibold)).foregroundStyle(NK.ink)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -1040,9 +1241,9 @@ struct CalendarTab: View {
                             ForEach(cal.events, id: \.eventIdentifier) { e in
                                 let past = (e.endDate ?? .distantFuture) < Date()
                                 HStack(spacing: 8) {
-                                    Capsule().fill(Color(nsColor: e.calendar.color)).frame(width: 3, height: 26)
+                                    Capsule().fill(Color(nsColor: e.calendar.color)).frame(width: 3, height: 28)
                                     VStack(alignment: .leading, spacing: 1) {
-                                        Text(e.title ?? "Event").font(PT.ui(12, 600)).foregroundStyle(past ? NK.mute : NK.ink).lineLimit(1)
+                                        Text(e.title ?? "Event").font(.system(size: 13, weight: .semibold)).foregroundStyle(past ? NK.mute : NK.ink).lineLimit(1)
                                         NKLabel(e.isAllDay ? "All day" : "\(HomeTab.time.string(from: e.startDate)) – \(HomeTab.time.string(from: e.endDate))")
                                     }
                                     Spacer(minLength: 0)
@@ -1052,13 +1253,14 @@ struct CalendarTab: View {
                             }
                         }
                     }
+                    .scrollIndicators(.never)
                 }
             }
         }
     }
 
-    static let month: DateFormatter = { let f = DateFormatter(); f.dateFormat = "MMMM yyyy"; return f }()
-    static let dayNum: DateFormatter = { let f = DateFormatter(); f.dateFormat = "dd"; return f }()
+    static let month: DateFormatter = { let f = DateFormatter(); f.setLocalizedDateFormatFromTemplate("MMMM yyyy"); return f }()
+    static let dayNum: DateFormatter = { let f = DateFormatter(); f.dateFormat = "d"; return f }()
     static let weekday: DateFormatter = { let f = DateFormatter(); f.dateFormat = "EEEE"; return f }()
 }
 
@@ -1069,36 +1271,41 @@ struct TimerTab: View {
     @ObservedObject var mirror = MirrorModel.shared
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             NKCard {
-                HStack(spacing: 16) {
+                HStack(spacing: 20) {
                     ZStack {
-                        Circle().stroke(NK.card2, lineWidth: 5)
+                        Circle().stroke(NK.card2, lineWidth: 6)
                         Circle().trim(from: 0, to: t.total > 0 ? t.remaining / t.total : 0)
-                            .stroke(t.running ? PT.accent : NK.ink, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                            .stroke(t.running ? PT.accent : NK.ink, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                             .rotationEffect(.degrees(-90))
-                        Text(t.label).font(PT.dot(t.remaining >= 3600 ? 18 : 26)).foregroundStyle(t.finished ? PT.accent : NK.ink)
+                            .animation(.linear(duration: 0.25), value: t.remaining)
+                        Text(t.label).font(.system(size: t.remaining >= 3600 ? 18 : 24, weight: .semibold, design: .rounded).monospacedDigit())
+                            .foregroundStyle(t.finished ? PT.accent : NK.ink)
+                            .contentTransition(.numericText(countsDown: true))
+                            .animation(Motion.quick, value: t.label)
                     }
-                    .frame(width: 112, height: 112)
+                    .frame(width: 100, height: 100)
+                    .padding(.leading, 4)
                     .onScrollWheel { dy in if !t.running { t.nudge(dy > 0 ? 1 : -1) } }
                     .help("Scroll to adjust")
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        NKLabel(t.running ? "Running" : (t.finished ? "Done" : "Scroll the dial or pick"))
+                    VStack(alignment: .leading, spacing: 10) {
+                        NKLabel(t.running ? "Running" : (t.finished ? "Done" : "Scroll the dial or pick a preset"))
                         HStack(spacing: 6) {
                             ForEach([5, 15, 25, 45, 60], id: \.self) { m in
-                                Button { t.set(minutes: m) } label: {
-                                    Text("\(m)").font(PT.mono(10)).foregroundStyle(NK.ink)
-                                        .frame(width: 30, height: 24)
+                                Button { withAnimation(Motion.settle) { t.set(minutes: m) } } label: {
+                                    Text("\(m)").font(.system(size: 11, weight: .semibold).monospacedDigit()).foregroundStyle(NK.ink)
+                                        .frame(width: 32, height: 24)
                                         .background(Capsule().fill(NK.card2))
-                                }.buttonStyle(.plain)
+                                }.buttonStyle(PressScale())
                             }
                         }
                         HStack(spacing: 8) {
                             NKRound(symbol: "minus", help: "−1 min") { t.nudge(-1) }
                             NKRound(symbol: t.running ? "pause.fill" : "play.fill", help: "Start / pause", primary: true) { t.toggle() }
                             NKRound(symbol: "plus", help: "+1 min") { t.nudge(1) }
-                            NKRound(symbol: "arrow.counterclockwise", help: "Reset") { t.stop() }
+                            NKRound(symbol: "arrow.counterclockwise", help: "Reset") { withAnimation(Motion.settle) { t.stop() } }
                         }
                     }
                     Spacer(minLength: 0)
@@ -1107,27 +1314,29 @@ struct TimerTab: View {
             NKCard(padding: 0) {
                 ZStack {
                     if mirror.running {
-                        MirrorPreview(session: mirror.session)
+                        MirrorPreview(session: mirror.session).transition(.opacity)
                     } else {
                         VStack(spacing: 6) {
                             Image(systemName: mirror.denied ? "video.slash" : "person.crop.square")
                                 .font(.system(size: 22, weight: .light)).foregroundStyle(NK.mute)
-                            Text("MIRROR").font(PT.mono(9.5)).tracking(1).foregroundStyle(NK.mute)
+                            Text("Mirror").font(.system(size: 12, weight: .semibold)).foregroundStyle(NK.mute)
                         }
+                        .transition(.opacity)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .contentShape(Rectangle())
                 .onTapGesture { mirror.running ? mirror.stop() : mirror.start() }
+                .animation(Motion.settle, value: mirror.running)
                 .help(mirror.denied ? "Camera access is off in System Settings" : "Click for a quick look at yourself")
             }
-            .frame(width: 150)
+            .frame(width: 160)
         }
     }
 }
 
-/// Scroll-wheel helper (SwiftUI has no scroll-wheel event on macOS 14).
+/// Scroll-wheel helper (SwiftUI has no scroll-wheel event outside ScrollView).
 struct ScrollCatcher: NSViewRepresentable {
     var onScroll: (CGFloat) -> Void
     func makeNSView(context: Context) -> NSView { V(onScroll: onScroll) }
@@ -1160,12 +1369,12 @@ struct NotesTab: View {
     @ObservedObject var n = NotesModel.shared
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             NKCard {
                 VStack(alignment: .leading, spacing: 6) {
                     NKLabel("Note")
                     TextEditor(text: $n.note)
-                        .font(PT.ui(12, 500)).foregroundStyle(NK.ink)
+                        .font(.system(size: 13)).foregroundStyle(NK.ink)
                         .scrollContentBackground(.hidden)
                         .background(Color.clear)
                 }
@@ -1173,38 +1382,41 @@ struct NotesTab: View {
             NKCard {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
-                        Circle().stroke(NK.mute, lineWidth: 1.2).frame(width: 12, height: 12)
-                        TextField("Add a to-do, press Return", text: $n.draft, onCommit: { n.add() })
-                            .textFieldStyle(.plain).font(PT.ui(12, 500)).foregroundStyle(NK.ink)
+                        Image(systemName: "plus.circle.fill").font(.system(size: 13)).foregroundStyle(NK.mute)
+                        TextField("Add a to-do", text: $n.draft, onCommit: { withAnimation(Motion.settle) { n.add() } })
+                            .textFieldStyle(.plain).font(.system(size: 13)).foregroundStyle(NK.ink)
                     }
                     .padding(.horizontal, 8).padding(.vertical, 6)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(NK.card))
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(NK.card))
                     ScrollView {
                         VStack(spacing: 2) {
                             ForEach(n.todos) { t in
                                 HStack(spacing: 8) {
-                                    Button { withAnimation { n.toggle(t) } } label: {
-                                        ZStack {
-                                            Circle().stroke(t.done ? PT.accent : NK.mute, lineWidth: 1.2)
-                                            if t.done { Circle().fill(PT.accent).padding(3) }
-                                        }.frame(width: 12, height: 12)
-                                    }.buttonStyle(.plain)
-                                    Text(t.text).font(PT.ui(12, 500))
+                                    Button { withAnimation(Motion.settle) { n.toggle(t) } } label: {
+                                        Image(systemName: t.done ? "checkmark.circle.fill" : "circle")
+                                            .font(.system(size: 13))
+                                            .foregroundStyle(t.done ? PT.accent : NK.mute)
+                                            .contentTransition(.symbolEffect(.replace))
+                                    }.buttonStyle(PressScale())
+                                    Text(t.text).font(.system(size: 13))
                                         .foregroundStyle(t.done ? NK.mute : NK.ink)
                                         .strikethrough(t.done, color: NK.mute).lineLimit(1)
                                     Spacer(minLength: 0)
-                                    Button { withAnimation { n.star(t) } } label: {
-                                        Image(systemName: t.starred ? "star.fill" : "star").font(.system(size: 10))
-                                            .foregroundStyle(t.starred ? PT.accent : NK.mute)
-                                    }.buttonStyle(.plain)
-                                    Button { withAnimation { n.remove(t) } } label: {
+                                    Button { withAnimation(Motion.settle) { n.star(t) } } label: {
+                                        Image(systemName: t.starred ? "star.fill" : "star").font(.system(size: 11))
+                                            .foregroundStyle(t.starred ? Color.yellow : NK.mute)
+                                            .contentTransition(.symbolEffect(.replace))
+                                    }.buttonStyle(PressScale())
+                                    Button { withAnimation(Motion.settle) { n.remove(t) } } label: {
                                         Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(NK.mute)
-                                    }.buttonStyle(.plain)
+                                    }.buttonStyle(PressScale())
                                 }
                                 .padding(.horizontal, 8).padding(.vertical, 3)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
                             }
                         }
                     }
+                    .scrollIndicators(.never)
                 }
             }
         }
@@ -1212,19 +1424,20 @@ struct NotesTab: View {
     }
 }
 
-// MARK: - Notch-side building blocks (Puteran components, dark)
+// MARK: - Notch-side building blocks (dark, native)
 
 struct NKCard<Content: View>: View {
     var highlight = false
-    var padding: CGFloat = 12
+    var padding: CGFloat = 14
     @ViewBuilder var content: Content
     var body: some View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(highlight ? PT.accent.opacity(0.12) : NK.card))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(highlight ? PT.accent : .clear, lineWidth: 1))
-            .animation(.easeOut(duration: 0.12), value: highlight)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(highlight ? PT.accent.opacity(0.16) : NK.card))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(highlight ? PT.accent : NK.line, lineWidth: highlight ? 1.5 : 0.5))
+            .animation(Motion.quick, value: highlight)
     }
 }
 
@@ -1232,9 +1445,10 @@ struct NKLabel: View {
     let text: String
     var color: Color = NK.mute
     init(_ t: String, color: Color = NK.mute) { text = t; self.color = color }
-    var body: some View { Text(text.uppercased()).font(PT.mono(9)).tracking(0.8).foregroundStyle(color).lineLimit(1) }
+    var body: some View { Text(text).font(.system(size: 11, weight: .medium)).foregroundStyle(color).lineLimit(1) }
 }
 
+/// Round control on a card (Control Center style): soft fill, hover lift, press squish.
 struct NKRound: View {
     let symbol: String
     var help = ""
@@ -1243,15 +1457,35 @@ struct NKRound: View {
     @StateObject private var hv = HoverBox()
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: primary ? 12 : 10.5, weight: .semibold))
-                .foregroundStyle(primary || hv.on ? Color.black : NK.ink)
-                .frame(width: primary ? 30 : 24, height: primary ? 30 : 24)
-                .background(Circle().fill(primary ? (hv.on ? PT.accent : NK.ink) : (hv.on ? NK.ink : NK.card2)))
+            Image(systemName: symbol).font(.system(size: primary ? 13 : 11, weight: .semibold))
+                .contentTransition(.symbolEffect(.replace))
+                .foregroundStyle(primary ? Color.black : NK.ink)
+                .frame(width: primary ? 32 : 26, height: primary ? 32 : 26)
+                .background(Circle().fill(primary ? Color.white.opacity(hv.on ? 0.85 : 1) : Color.white.opacity(hv.on ? 0.2 : 0.1)))
+                .contentShape(Circle())
         }
-        .buttonStyle(.plain)
-        .onHover { hv.on = $0 }
+        .buttonStyle(PressScale())
+        .onHover { h in withAnimation(Motion.quick) { hv.on = h } }
         .help(help)
-        .animation(.easeOut(duration: 0.1), value: hv.on)
+    }
+}
+
+/// Bare icon in the top row (settings).
+struct IconButton: View {
+    let symbol: String
+    var help = ""
+    let action: () -> Void
+    @StateObject private var hv = HoverBox()
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(hv.on ? NK.ink : NK.mute)
+                .frame(width: 30, height: 26)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressScale())
+        .onHover { h in withAnimation(Motion.quick) { hv.on = h } }
+        .help(help)
     }
 }
 
@@ -1259,22 +1493,16 @@ struct NKShare: View {
     @ObservedObject var shelf: Shelf
     var body: some View {
         AnchoredButton(symbol: "square.and.arrow.up", help: "Share") { v in Actions.share(shelf.targets, from: v, rect: v.bounds) }
-            .frame(width: 24, height: 24)
-            .background(Circle().fill(NK.card2))
+            .frame(width: 26, height: 26)
+            .background(Circle().fill(Color.white.opacity(0.1)))
     }
 }
 
-struct NKDotGrid: View {
-    var active: Bool
-    var body: some View {
-        Canvas { ctx, size in
-            let sp: CGFloat = 9
-            let cols = Int(size.width / sp), rows = Int(size.height / sp)
-            for r in 0..<rows { for c in 0..<cols {
-                let p = CGPoint(x: sp / 2 + CGFloat(c) * sp, y: sp / 2 + CGFloat(r) * sp)
-                ctx.fill(Path(ellipseIn: CGRect(x: p.x - 1.1, y: p.y - 1.1, width: 2.2, height: 2.2)),
-                         with: .color(active ? PT.accent.opacity(0.8) : NK.dot))
-            } }
-        }
+/// Press feedback used by every custom control: quick squish with a little spring back.
+struct PressScale: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.88 : 1)
+            .animation(.spring(duration: 0.28, bounce: 0.45), value: configuration.isPressed)
     }
 }
