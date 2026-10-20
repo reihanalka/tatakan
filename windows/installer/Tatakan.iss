@@ -43,17 +43,12 @@ RestartApplications=no
 
 [Languages]
 Name: "en"; MessagesFile: "compiler:Default.isl"
-Name: "id"; MessagesFile: "compiler:Languages\Indonesian.isl"
 
 [CustomMessages]
-en.StartupTask=Start Tatakan when I sign in
-id.StartupTask=Jalankan Tatakan saat masuk Windows
-en.Launch=Open Tatakan now
-id.Launch=Buka Tatakan sekarang
-en.NeedsDotNet=Tatakan needs the .NET 8 Desktop Runtime (about 55 MB, from Microsoft). It will be downloaded and installed now.
-id.NeedsDotNet=Tatakan butuh .NET 8 Desktop Runtime (sekitar 55 MB, dari Microsoft). Sekarang akan di-download dan dipasang.
-en.DotNetFailed=The .NET 8 Desktop Runtime couldn't be installed. Install it from https://aka.ms/dotnet/8.0 and run this setup again.
-id.DotNetFailed=.NET 8 Desktop Runtime gagal dipasang. Pasang manual dari https://aka.ms/dotnet/8.0 lalu jalankan setup ini lagi.
+StartupTask=Start Tatakan when I sign in
+Launch=Open Tatakan now
+NeedsDotNet=Tatakan needs the .NET 8 Desktop Runtime (about 55 MB, from Microsoft). It will be downloaded and installed now.
+DotNetFailed=The .NET 8 Desktop Runtime couldn't be installed. Install it from https://aka.ms/dotnet/8.0 and run this setup again.
 
 [Tasks]
 Name: "startup"; Description: "{cm:StartupTask}"
