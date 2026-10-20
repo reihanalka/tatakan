@@ -78,6 +78,8 @@ namespace Tatakan
             appPicker.FontFamily = Theme.Ui;
             appPicker.FontSize = 12;
             appPicker.Margin = new Thickness(0, 0, 8, 0);
+            appPicker.Padding = new Thickness(8, 4, 8, 4);
+            appPicker.VerticalContentAlignment = VerticalAlignment.Center;
             appPicker.DropDownOpened += (_, _) => FillPicker();
             FillPicker();
             pick.Children.Add(appPicker);

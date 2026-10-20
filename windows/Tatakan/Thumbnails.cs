@@ -45,9 +45,24 @@ namespace Tatakan
             foreach (var (item, px, done) in queue.GetConsumingEnumerable())
             {
                 ImageSource? img = null;
-                try { img = Shell(item.Path!, px); } catch { }
+                try { img = item.IsImage ? Decode(item.Path!, px) : null; } catch { }
+                try { img ??= Shell(item.Path!, px); } catch { }
                 done(img);
             }
+        }
+
+        /// <summary>Images: decode a small copy directly (works even when Explorer thumbnails are turned off).</summary>
+        static ImageSource? Decode(string path, int px)
+        {
+            var b = new BitmapImage();
+            b.BeginInit();
+            b.UriSource = new Uri(path);
+            b.CacheOption = BitmapCacheOption.OnLoad;
+            b.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+            b.DecodePixelWidth = px;
+            b.EndInit();
+            b.Freeze();
+            return b;
         }
 
         [ComImport, Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]

@@ -65,31 +65,8 @@ namespace Tatakan
             return img;
         }
 
-        public static Style ThinScrollBar()
-        {
-            var thumbTemplate = new ControlTemplate(typeof(Thumb));
-            var thumbBorder = new FrameworkElementFactory(typeof(Border));
-            thumbBorder.SetValue(Border.CornerRadiusProperty, new CornerRadius(2));
-            thumbBorder.SetResourceReference(Border.BackgroundProperty, "Mute");
-            thumbBorder.SetValue(UIElement.OpacityProperty, 0.45);
-            thumbTemplate.VisualTree = thumbBorder;
-
-            var template = new ControlTemplate(typeof(ScrollBar));
-            var track = new FrameworkElementFactory(typeof(Track), "PART_Track");
-            track.SetValue(Track.IsDirectionReversedProperty, true);
-            track.SetValue(Track.OrientationProperty, new TemplateBindingExtension(ScrollBar.OrientationProperty));
-            var thumb = new FrameworkElementFactory(typeof(Thumb));
-            thumb.SetValue(Control.TemplateProperty, thumbTemplate);
-            track.AppendChild(thumb);
-            template.VisualTree = track;
-
-            var style = new Style(typeof(ScrollBar));
-            style.Setters.Add(new Setter(FrameworkElement.WidthProperty, 4.0));
-            style.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 4.0));
-            style.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(0, 2, -7, 2)));
-            style.Setters.Add(new Setter(Control.TemplateProperty, template));
-            return style;
-        }
+        /// <summary>4 px rounded scrollbar thumb, no arrows (template built in XAML, see App.xaml "ThinScrollBar").</summary>
+        public static Style ThinScrollBar() => (Style)Application.Current.Resources["ThinScrollBar"];
 
         public static Ellipse Swatch(Color c) =>
             new() { Width = 10, Height = 10, Fill = new SolidColorBrush(c), VerticalAlignment = VerticalAlignment.Center };
