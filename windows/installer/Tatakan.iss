@@ -84,14 +84,35 @@ begin
   if IsArm64 then Result := 'arm64' else Result := 'x64';
 end;
 
-{ .NET 8 Desktop Runtime registers itself under HKLM\SOFTWARE\dotnet\Setup\InstalledVersions\<arch>\sharedfx\Microsoft.WindowsDesktop.App }
+{ .NET 8 Desktop Runtime: registered under HKLM\SOFTWARE\dotnet\Setup\InstalledVersions\<arch>\sharedfx\Microsoft.WindowsDesktop.App
+  by the official installer; zip/SDK installs only leave the folder, so check that too. }
+function HasRuntimeFolder(Base: String): Boolean;
+var
+  F: TFindRec;
+begin
+  Result := False;
+  if FindFirst(Base + '\dotnet\shared\Microsoft.WindowsDesktop.App\8.*', F) then
+  try
+    repeat
+      if (F.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
+      begin
+        Result := True;
+        Exit;
+      end;
+    until not FindNext(F);
+  finally
+    FindClose(F);
+  end;
+end;
+
 function HasDesktopRuntime8: Boolean;
 var
   Names: TArrayOfString;
   I: Integer;
   Key: String;
 begin
-  Result := False;
+  Result := HasRuntimeFolder(ExpandConstant('{commonpf64}'));
+  if Result then Exit;
   Key := 'SOFTWARE\dotnet\Setup\InstalledVersions\' + RuntimeArch + '\sharedfx\Microsoft.WindowsDesktop.App';
   if RegGetValueNames(HKLM64, Key, Names) then
     for I := 0 to GetArrayLength(Names) - 1 do

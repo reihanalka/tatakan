@@ -41,8 +41,9 @@ jobs:
         shell: pwsh
         run: |
           $setup = Get-ChildItem windows\dist\Tatakan-Setup-*.exe | Select-Object -First 1
-          $p = Start-Process $setup.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "setup exit $($p.ExitCode)" }
+          $log = Join-Path $env:RUNNER_TEMP 'tatakan-setup.log'
+          $p = Start-Process $setup.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/LOG=`"$log`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content $log -Tail 40; throw "setup exit $($p.ExitCode)" }
           $exe = Join-Path $env:LOCALAPPDATA 'Programs\Tatakan\Tatakan.exe'
           if (-not (Test-Path $exe)) { $exe = Join-Path $env:ProgramFiles 'Tatakan\Tatakan.exe' }
           if (-not (Test-Path $exe)) { throw 'Tatakan.exe not installed' }
