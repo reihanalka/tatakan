@@ -62,9 +62,11 @@ jobs:
         run: |
           choco install innosetup --no-progress -y | Out-Null
           .\windows\build.ps1
-          Get-ChildItem windows\dist\Tatakan-Setup-*.exe | ForEach-Object {
+          $lines = Get-ChildItem windows\dist\Tatakan-Setup-*.exe | ForEach-Object {
             "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
-          } | Set-Content -Encoding ascii windows\dist\SHA256SUMS-windows.txt
+          }
+          # LF line endings so `shasum -c` / `sha256sum -c` work on macOS and Linux too.
+          [IO.File]::WriteAllText("$PWD\windows\dist\SHA256SUMS-windows.txt", (($lines -join "`n") + "`n"))
 
       - name: Upload to release
         if: startsWith(github.ref, 'refs/tags/')
