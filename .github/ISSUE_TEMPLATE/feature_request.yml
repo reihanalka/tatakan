@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest a feature or improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the moment, not just the button. e.g. "I keep re-finding the same three files when I write emails."
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: Sketches or screenshots of similar apps are welcome.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where would it live?
+      options: [Shelf, Nook, New Nook tab, Settings, Not sure]
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Can you help?
+      options:
+        - label: I'd like to build this myself

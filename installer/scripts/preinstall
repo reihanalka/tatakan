@@ -1,0 +1,5 @@
+#!/bin/bash
+# Quit a running Tatakan so the new version can replace it.
+pkill -x Tatakan 2>/dev/null || true
+sleep 1
+exit 0

@@ -1,0 +1,15 @@
+TATAKAN — install (Apple Silicon & Intel, macOS 14 or newer)
+
+1. Drag Tatakan.app onto the Applications folder.
+2. Open Tatakan from Applications.
+   This build isn't notarized by Apple, so the first launch is blocked.
+   Fix it once:
+     System Settings → Privacy & Security → scroll down → "Open Anyway"
+   or in Terminal:
+     xattr -dr com.apple.quarantine /Applications/Tatakan.app
+3. Tatakan lives in the menu bar (no Dock icon).
+
+Easier option: use Tatakan-x.y.z.pkg from the release page instead.
+It installs to /Applications and clears the warning for you.
+
+Source code: https://github.com/reihanalka/tatakan

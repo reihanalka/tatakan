@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+._*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Builds
+Tatakan/build/
+Tatakan/Tools/assettool
+dist/
+
+# Local-only folders (old release staging, raw mockups — screenshots live in docs/)
+_release/
+mockup/
+*.zip

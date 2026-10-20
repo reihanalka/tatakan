@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Tatakan</string>
+	<key>CFBundleExecutable</key>
+	<string>Tatakan</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.reihan.tatakan</string>
+	<key>CFBundleName</key>
+	<string>Tatakan</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.3.1</string>
+	<key>CFBundleVersion</key>
+	<string>4</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Tatakan shows a short notice at the notch when headphones or other Bluetooth devices connect.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Tatakan shows today's events in the notch. Nothing leaves your Mac.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>The Mirror in the notch shows your camera so you can check yourself before a call. Nothing is recorded.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Reihan Al Kautsar. MIT License.</string>
+</dict>
+</plist>

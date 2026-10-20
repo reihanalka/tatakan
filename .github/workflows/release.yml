@@ -1,0 +1,41 @@
+name: Release
+
+# Push a tag like v0.3.1 → builds the universal app on a clean macOS runner
+# and attaches Tatakan-<ver>.pkg / .dmg / .zip + SHA256SUMS to the GitHub release.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release files
+        run: ./scripts/make-release.sh
+
+      - name: Check version matches tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          VER=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Tatakan/Info.plist)
+          [ "v$VER" = "${GITHUB_REF_NAME}" ] || { echo "::error::Info.plist is $VER but tag is ${GITHUB_REF_NAME}"; exit 1; }
+
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --title "Tatakan ${GITHUB_REF_NAME#v}" --notes "See CHANGELOG.md"
+          gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+
+      - name: Keep files as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tatakan-release
+          path: dist/

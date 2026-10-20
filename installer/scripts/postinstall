@@ -1,0 +1,11 @@
+#!/bin/bash
+# Clear the download quarantine flag and open Tatakan for the logged-in user.
+APP="/Applications/Tatakan.app"
+xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+
+USER_NAME=$(stat -f%Su /dev/console)
+if [ -n "$USER_NAME" ] && [ "$USER_NAME" != "root" ]; then
+  USER_ID=$(id -u "$USER_NAME")
+  launchctl asuser "$USER_ID" sudo -u "$USER_NAME" open "$APP" 2>/dev/null || true
+fi
+exit 0

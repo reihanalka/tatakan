@@ -1,0 +1,13 @@
+Tatakan
+Copyright (c) 2026 Reihan Al Kautsar
+
+The source code is licensed under the MIT License (see LICENSE).
+
+Not covered by the MIT License:
+
+- The name "Tatakan" and the logo/icon artwork in "Tatakan - Logo.ai",
+  "Tatakan_Icon.svg", "Tatakan_Icon_2.svg", Tatakan/Resources/AppIcon.icns,
+  Tatakan/Resources/Icons/ and docs/screenshots/appicon-preview.png belong to
+  Reihan Al Kautsar. See TRADEMARKS.md.
+- The Doto, Space Grotesk and Space Mono font files in Tatakan/Resources/Fonts/
+  are licensed under the SIL Open Font License 1.1. See OFL-*.txt there.

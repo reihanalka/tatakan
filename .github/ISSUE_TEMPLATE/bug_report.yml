@@ -1,0 +1,48 @@
+name: Bug report
+description: Something in Tatakan doesn't work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting! English or Bahasa Indonesia are both fine.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part?
+      options: [Shelf, Nook / notch panel, Now Playing, Calendar, Timer / Notes, Mirror, Install / won't open, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you were doing and what you saw.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+  - type: input
+    id: os
+    attributes:
+      label: macOS version
+      placeholder: e.g. 15.3, 27.0
+    validations:
+      required: true
+  - type: dropdown
+    id: mac
+    attributes:
+      label: Mac
+      options: [Apple Silicon with notch, Apple Silicon without notch, Intel Mac, External display]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Tatakan version
+      placeholder: e.g. 0.3.1
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshots or a screen recording
