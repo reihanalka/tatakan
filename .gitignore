@@ -16,3 +16,8 @@ dist/
 _release/
 mockup/
 *.zip
+
+# Windows build output
+windows/dist/
+windows/Tatakan/bin/
+windows/Tatakan/obj/

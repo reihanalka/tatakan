@@ -9,7 +9,7 @@ body:
     id: area
     attributes:
       label: Which part?
-      options: [Shelf, Nook / notch panel, Now Playing, Calendar, Timer / Notes, Mirror, Install / won't open, Other]
+      options: [Shelf, Nook / notch panel (Mac), Now Playing (Mac), Calendar / Timer / Notes (Mac), Mirror (Mac), Tray icon (Windows), Install / won't open, Other]
     validations:
       required: true
   - type: textarea
@@ -26,23 +26,24 @@ body:
   - type: input
     id: os
     attributes:
-      label: macOS version
-      placeholder: e.g. 15.3, 27.0
+      label: OS version
+      placeholder: e.g. macOS 27.0, Windows 11 24H2
     validations:
       required: true
   - type: dropdown
     id: mac
     attributes:
-      label: Mac
-      options: [Apple Silicon with notch, Apple Silicon without notch, Intel Mac, External display]
+      label: Device
+      options: [Mac — Apple Silicon with notch, Mac — Apple Silicon without notch, Mac — Intel, Mac — external display, Windows PC (x64), Windows PC (ARM64)]
     validations:
       required: true
   - type: input
     id: version
     attributes:
       label: Tatakan version
-      placeholder: e.g. 0.3.1
+      placeholder: e.g. 0.4.0
   - type: textarea
     id: media
     attributes:
-      label: Screenshots or a screen recording
+      label: Screenshots, a screen recording or error.log
+      description: On Windows, drag in %LOCALAPPDATA%\Tatakan\error.log if it exists.

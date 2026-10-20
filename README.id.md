@@ -5,8 +5,9 @@
 <h1 align="center">Tatakan</h1>
 
 <p align="center">
-  Rak drag-and-drop buat file, plus panel kecil yang muncul dari notch MacBook.<br>
-  Native Swift. Gratis dan open source (MIT).
+  Rak drag-and-drop buat file, di <b>macOS</b> dan <b>Windows</b>.<br>
+  Di Mac ada bonus panel kecil yang muncul dari notch.<br>
+  Native di dua-duanya. Gratis dan open source (MIT).
 </p>
 
 <p align="center"><a href="README.md">Read in English</a></p>
@@ -19,13 +20,22 @@ Tatakan itu tempat naruh barang sebentar. Begitu juga app ini: taruh file dulu s
 
 ## Fitur
 
-- **Shelf**: lagi nge-drag file, goyangin pointer sebentar, rak melayang langsung muncul.
-- **Aksi item**: copy, buka di Finder, share, AirDrop, thumbnail cepat.
-- **Nook**: panel hitam di notch, isinya Now Playing, Tray, Kalender (agenda hari ini), Timer, dan Notes. Di layar tanpa notch, muncul sebagai pill tipis di atas.
-- **Mirror**: cek kamera sebelum call. Nggak ada yang direkam.
-- **Notifikasi Bluetooth**: notice kecil pas headphone atau device lain nyambung.
+| | macOS | Windows |
+|---|:---:|:---:|
+| **Shelf**: goyangin pointer pas lagi nge-drag, rak melayang muncul | ✅ | ✅ |
+| Taruh file, folder, link, teks, gambar; drag keluar lagi | ✅ | ✅ |
+| Banyak rak sekaligus, kasih nama & warna, Recent Shelves | ✅ | ✅ |
+| Copy, buka, simpan/pindah ke folder, ZIP | ✅ | ✅ |
+| Resize & convert gambar, ambil teks dari gambar (OCR) | ✅ | ✅ |
+| Share | ✅ AirDrop, Messages, Mail | ✅ Nearby Share, Mail, app lain |
+| **Nook**: panel notch (Now Playing, Tray, Kalender, Timer, Notes) | ✅ | — khusus Mac |
+| Mirror, notifikasi Bluetooth & baterai di notch | ✅ | — khusus Mac |
 
-## Instal
+Fitur notch cuma ada di Mac, karena notch-nya memang cuma ada di MacBook. Versi Windows fokus ke rak-nya.
+
+![Tatakan di Windows](docs/screenshots/windows-shelves.png)
+
+## Instal di Mac
 
 Bisa di **Mac Apple Silicon maupun Intel**, minimal **macOS 14 Sonoma**.
 
@@ -41,22 +51,50 @@ Bisa di **Mac Apple Silicon maupun Intel**, minimal **macOS 14 Sonoma**.
 curl -fsSL https://raw.githubusercontent.com/reihanalka/tatakan/main/scripts/install.sh | bash
 ```
 
-Otomatis download versi terbaru, taruh di `/Applications`, lalu dibuka. Jalanin baris yang sama buat update.
-
 ### Cara 3: Disk image (.dmg)
 
 Buka **`Tatakan-x.y.z.dmg`**, drag Tatakan ke Applications, lalu izinkan sekali di **System Settings → Privacy & Security → Open Anyway**.
 
 > [!NOTE]
-> Tatakan belum dinotarisasi Apple (butuh akun developer berbayar), jadi macOS kasih peringatan di pembukaan pertama. Installer .pkg dan Terminal udah ngurusin itu. App ini nggak pakai internet sama sekali, dan cuma minta akses Kalender, Bluetooth, dan Kamera pas fiturnya dipakai.
+> Tatakan belum dinotarisasi Apple (butuh akun developer berbayar), jadi macOS kasih peringatan di pembukaan pertama. Installer .pkg dan Terminal udah ngurusin itu.
 
-### Uninstall
+**Uninstall:** Quit dari ikon menu bar, buang `/Applications/Tatakan.app` ke Trash.
 
-Quit Tatakan dari ikon menu bar, lalu buang `/Applications/Tatakan.app` ke Trash.
+## Instal di Windows
+
+Bisa di **Windows 10 (1809 ke atas) dan Windows 11**, PC biasa (**x64**) maupun **ARM64** (Snapdragon / Surface). Satu installer buat semua.
+
+### Cara 1: Installer (.exe) — paling gampang
+
+1. Download **`Tatakan-Setup-x.y.z.exe`** dari [release terbaru](https://github.com/reihanalka/tatakan/releases/latest).
+2. Jalankan. Kalau muncul **Windows protected your PC**, klik **More info → Run anyway**.
+3. Klik Next sampai selesai. Kalau PC-nya belum punya **.NET 8 Desktop Runtime** (gratis dari Microsoft, ±55 MB), installer otomatis download dan minta izin admin sekali.
+4. Tatakan jalan di pojok kanan bawah (notification area). Kadang ngumpet di tombol **^**; drag ikonnya ke taskbar biar selalu kelihatan.
+
+### Cara 2: PowerShell, satu baris
+
+```powershell
+irm https://raw.githubusercontent.com/reihanalka/tatakan/main/windows/install.ps1 | iex
+```
+
+Otomatis download installer terbaru, pasang, nyalain *start saat login*, dan buka Tatakan. Jalanin lagi buat update.
+
+> [!NOTE]
+> Versi Windows belum ditandatangani sertifikat (bayar tiap tahun), makanya SmartScreen kasih peringatan. File-nya dibuat GitHub Actions langsung dari repo ini; bisa dicek pakai `SHA256SUMS-windows.txt` di halaman release.
+
+### Cara pakai di Windows
+
+- **Buka rak**: pas lagi nge-drag file, goyangin pointer kiri-kanan. Atau tekan **Ctrl+Alt+Space**, atau klik ikon tray.
+- **Taruh** file, folder, link, teks, atau gambar. **Drag** tumpukannya keluar buat naruh semua, atau klik buat lihat daftarnya.
+- **Klik kanan** item (atau tombol **⋯**): Open, Copy, Save to Folder, ZIP, Image, Share…
+- **Shortcut di rak**: `Ctrl+C` `Ctrl+V` `Ctrl+A` · `Del` hapus · `Enter` buka · `F2` ganti nama · `Esc` tutup.
+- **Settings** (klik kanan ikon tray): sensitivitas goyang, app yang dikecualikan, start saat login.
+
+**Uninstall:** *Settings → Apps → Installed apps → Tatakan → Uninstall*.
 
 ## Build sendiri
 
-Cukup Command Line Tools (`xcode-select --install`), nggak perlu Xcode. Langkah lengkap ada di [README bahasa Inggris](README.md#build-from-source).
+Langkah lengkap (Mac & Windows) ada di [README bahasa Inggris](README.md#build-from-source).
 
 ## Lisensi
 

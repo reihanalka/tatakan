@@ -5,10 +5,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 ## [Unreleased]
 
 ### Ideas / help wanted
-- Notarized builds so macOS stops warning on first launch.
-- A public replacement for the private MediaRemote "Now Playing" workaround.
-- Replace deprecated APIs that cause compiler warnings.
-- Testing on Intel Macs and on external displays without a notch.
+- Notarized Mac builds and a code-signed Windows installer, so first launch doesn't warn.
+- A public replacement for the private MediaRemote "Now Playing" workaround (Mac).
+- Quick Look–style preview on Windows (Space).
+- Replace deprecated Mac APIs that cause compiler warnings.
+- Testing on Intel Macs, real Windows PCs, multi-monitor and high-DPI setups.
+
+## [0.4.0] — 2026-10-20
+
+### Added
+- **Windows version** (Windows 10 1809+ / 11, x64 and ARM64). A native C# / WPF port of the shelf:
+  - shake-to-open while dragging, `Ctrl+Alt+Space`, tray icon (click = new shelf, right-click = menu)
+  - drop files, folders, links, text, images and virtual files (e.g. Outlook attachments); drag out to Explorer and other apps
+  - pile and list views, multi-select, rename, colours, Recent Shelves
+  - Open, Show in File Explorer, Copy, Copy Path, Save/Move to Folder, Create ZIP
+  - image resize/convert and offline OCR (Windows' built-in engine)
+  - Windows share sheet (Nearby Share, Mail, apps)
+  - same look as the Mac app: Doto / Space Grotesk / Space Mono, light and dark mode following Windows
+  - settings: shake sensitivity, excluded apps, start at sign-in
+- **Windows installer** `Tatakan-Setup-x.y.z.exe` (per-user, no admin; installs the .NET 8 Desktop Runtime if missing) and a one-line PowerShell installer.
+- CI builds, installs and screenshots the Windows app on every push; releases attach Mac and Windows files together.
+
+### Not on Windows
+- The Nook (notch panel), Mirror and Bluetooth/battery notices. They depend on the MacBook notch and stay Mac only.
 
 ## [0.3.1] — 2026-10-20
 

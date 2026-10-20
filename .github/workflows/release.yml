@@ -1,7 +1,9 @@
 name: Release
 
-# Push a tag like v0.3.1 → builds the universal app on a clean macOS runner
-# and attaches Tatakan-<ver>.pkg / .dmg / .zip + SHA256SUMS to the GitHub release.
+# Push a tag like v0.4.0 → builds on clean runners and attaches to the GitHub release:
+#   macOS   Tatakan-<ver>.pkg / .dmg / .zip + SHA256SUMS.txt          (Apple Silicon + Intel)
+#   Windows Tatakan-Setup-<ver>.exe + SHA256SUMS-windows.txt          (x64 + ARM64, no notch features)
+# Tatakan/Info.plist and windows/Tatakan/Tatakan.csproj must both carry the tag's version.
 on:
   push:
     tags: ["v*"]
@@ -11,19 +13,19 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  mac:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build release files
-        run: ./scripts/make-release.sh
 
       - name: Check version matches tag
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           VER=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Tatakan/Info.plist)
           [ "v$VER" = "${GITHUB_REF_NAME}" ] || { echo "::error::Info.plist is $VER but tag is ${GITHUB_REF_NAME}"; exit 1; }
+
+      - name: Build release files
+        run: ./scripts/make-release.sh
 
       - name: Upload to release
         if: startsWith(github.ref, 'refs/tags/')
@@ -34,8 +36,52 @@ jobs:
             gh release create "$GITHUB_REF_NAME" --title "Tatakan ${GITHUB_REF_NAME#v}" --notes "See CHANGELOG.md"
           gh release upload "$GITHUB_REF_NAME" dist/* --clobber
 
-      - name: Keep files as a workflow artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: tatakan-release
+          name: tatakan-mac
           path: dist/
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Check version matches tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          [xml]$p = Get-Content windows\Tatakan\Tatakan.csproj
+          $v = $p.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          if ("v$v" -ne $env:GITHUB_REF_NAME) { throw "Tatakan.csproj is $v but tag is $env:GITHUB_REF_NAME" }
+
+      - name: Build app (x64 + arm64) and installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y | Out-Null
+          .\windows\build.ps1
+          Get-ChildItem windows\dist\Tatakan-Setup-*.exe | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
+          } | Set-Content -Encoding ascii windows\dist\SHA256SUMS-windows.txt
+
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in 1 2 3 4 5 6; do
+            gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 && break
+            [ $i = 1 ] && gh release create "$GITHUB_REF_NAME" --title "Tatakan ${GITHUB_REF_NAME#v}" --notes "See CHANGELOG.md" 2>/dev/null && break
+            sleep 10
+          done
+          gh release upload "$GITHUB_REF_NAME" windows/dist/Tatakan-Setup-*.exe windows/dist/SHA256SUMS-windows.txt --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tatakan-windows
+          path: |
+            windows/dist/Tatakan-Setup-*.exe
+            windows/dist/SHA256SUMS-windows.txt
