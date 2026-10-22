@@ -36,11 +36,27 @@
 | Resize and convert images, extract text (OCR) | ✅ | ✅ |
 | Share sheet | ✅ AirDrop, Messages, Mail… | ✅ Nearby Share, Mail, apps… |
 | Quick Look (Space) | ✅ | — |
+| **Tab Groups**: drop any window on another and hold, they share one frame under a tab strip | ✅ | — Mac only |
 | **Nook**: notch panel with Now Playing, Tray, Calendar, Timer, Notes | ✅ | — Mac only |
 | Mirror, Bluetooth and battery notices in the notch | ✅ | — Mac only |
 | Light and dark mode, one accent colour (`#F07A42`) | ✅ | ✅ |
 
 The notch features only exist on the Mac, because that's where the notch is. The Windows version is the shelf, done properly.
+
+### Tab Groups (Mac, beta)
+
+Turn on **Tab Groups** from the menu bar icon (it's off by default). macOS asks once for Accessibility, which is how any app moves other apps' windows.
+
+- **Make a group**: drag a window by its title bar onto the middle of another window and keep still for half a second. The outline changes from *Hold to tab* to *Tab*. Let go. Any apps can share a group, e.g. Figma + a PDF brief + Safari.
+- **Switch**: click a tab, or `⌃⌥⇥` / `⌃⌥⇧⇥`.
+- **Move the group**: drag the visible window; the strip follows.
+- **Reorder**: drag a tab sideways. **Take one out**: drag it off the strip.
+- **Right-click a tab**: Close Tab, Move Out of Group, Separate All Tabs.
+- Apps you never want grouped go in **Settings → Never group these apps**.
+
+Hidden tabs wait just past the screen's corner. When Tatakan quits (or is force-quit), they come back on screen. The strip is Tatakan's own, not macOS tabs, so an app's own `⌘⇧]` won't jump between apps.
+
+![Tab strip, light and dark](docs/screenshots/tab-groups-strip.png)
 
 <p>
   <img src="docs/screenshots/nook-tray.png" width="49%">
@@ -161,7 +177,7 @@ Tatakan_Icon.svg          colour logo → app icons (Mac + Windows)
 Tatakan_Icon_2.svg        mono logo   → menu-bar / tray glyph
 Tatakan/                  macOS app (Swift, SwiftUI + AppKit)
 ├── build.sh
-├── Sources/              AppDelegate, Shelf, Notch, Actions, Theme, …
+├── Sources/              AppDelegate, Shelf, Notch, TabGroups, Actions, Theme, …
 ├── Resources/            fonts (OFL), icons, MediaAdapter.m
 └── Tools/assettool.swift font list + SVG → PNG
 installer/                macOS .pkg installer
@@ -179,6 +195,7 @@ docs/screenshots/
 
 - **Now Playing** (Mac) reads Apple's private `MediaRemote` framework through a small dylib loaded by `/usr/bin/perl`. It's a workaround, not a public API. It may break in a future macOS, and it would not pass App Store review.
 - **Shake to open** on Windows uses a low-level mouse hook (`WH_MOUSE_LL`). No admin rights, no keylogging: only mouse moves while the left button is held are looked at.
+- **Tab Groups** (Mac) use the Accessibility API plus the private `_AXUIElementGetWindow` call to match windows. Same approach as most Mac window managers; it would not pass App Store review either.
 - Some Mac APIs used are deprecated (you'll see compiler warnings). They still work on macOS 14–27. PRs welcome.
 - Testing: the author uses Apple Silicon. Windows builds are installed and screenshotted on a clean Windows runner in CI on every push. Reports from Intel Macs and real Windows PCs are very welcome.
 

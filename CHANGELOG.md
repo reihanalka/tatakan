@@ -11,6 +11,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 - Replace deprecated Mac APIs that cause compiler warnings.
 - Testing on Intel Macs, real Windows PCs, multi-monitor and high-DPI setups.
 
+## [0.5.0] — 2026-10-22
+
+Mac only. The Windows app stays at 0.4.0.
+
+### Added
+- **Tab Groups** (beta, off by default). Drag any window onto the middle of another and hold for half a second: they share one frame under a tab strip, whatever their apps.
+  - Click a tab or press `⌃⌥⇥` / `⌃⌥⇧⇥` to switch; drag a tab sideways to reorder or off the strip to take it out.
+  - Right-click a tab: Close Tab, Move Out of Group, Separate All Tabs.
+  - Drag the visible window to move the whole group; drop a group on another window to merge them.
+  - Groups are remembered when Tatakan restarts; hidden tabs come back on screen when Tatakan quits, even when it's force-quit.
+  - Settings: on/off and a list of apps that are never grouped.
+- Needs Accessibility, asked for only when Tab Groups is switched on.
+
+### Changed
+- The Settings window scrolls instead of growing past the screen.
+- Release workflow: the Windows job is skipped when a tag is Mac only; the PowerShell installer picks the newest release that has a Windows installer.
+
 ## [0.4.0] — 2026-10-20
 
 ### Added

@@ -10,6 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var settingsWindow: NSWindow?
     private var nook: NookController?
     private var nookKey: HotKey?
+    private var demoStrips: [TabStripPanel] = []
+    private var sigterm: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ n: Notification) {
         PT.registerFonts()
@@ -31,9 +33,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         NotificationCenter.default.addObserver(forName: .tatakanNotchToggled, object: nil, queue: .main) { [weak self] _ in
             self?.setupNook()
         }
+        TabGroupController.shared.sync()
+        // kill / logout sends SIGTERM, which skips applicationWillTerminate: bring hidden tabs back first.
+        signal(SIGTERM, SIG_IGN)
+        let term = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        term.setEventHandler { TabGroupController.shared.willTerminate(); exit(0) }
+        term.resume()
+        sigterm = term
         if CommandLine.arguments.contains("--light") { NSApp.appearance = NSAppearance(named: .aqua) }
         if CommandLine.arguments.contains("--demo") { demo() }
+        if CommandLine.arguments.contains("--settings") { openSettings() }
+        if CommandLine.arguments.contains("--tabstrip") {      // screenshot of the tab strip, no windows touched
+            let apps = ["com.apple.finder", "com.apple.Safari", "com.figma.Desktop"].compactMap { bid in
+                NSWorkspace.shared.urlForApplication(withBundleIdentifier: bid).map { NSWorkspace.shared.icon(forFile: $0.path) }
+            }
+            let titles = ["Projects", "Moodboard — Pinterest", "Feugee — KV Board"]
+            for (i, dark) in [false, true].enumerated() {
+                let p = TabStripPanel(controller: TabGroupController.shared)
+                p.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                p.update(tabs: (0..<3).map { TabInfo(id: CGWindowID(900 + $0), title: titles[$0], icon: apps.indices.contains($0) ? apps[$0] : nil) },
+                         active: 901, axFrame: CGRect(x: 200, y: 200 + CGFloat(i) * 60, width: 620, height: 26))
+                demoStrips.append(p)
+            }
+        }
     }
+
+    func applicationWillTerminate(_ n: Notification) { TabGroupController.shared.willTerminate() }
 
     // MARK: Notch
     /// The screen with a notch, else the main (menu-bar) screen.
@@ -110,6 +135,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             menu.addItem(ClosureMenuItem("Close All Shelves", symbol: "xmark.square") { [weak self] in
                 self?.shelves.forEach { $0.close() }
             })
+        }
+
+        menu.addItem(.separator())
+        let tabsItem = ClosureMenuItem("Tab Groups", symbol: "rectangle.stack") { Settings.shared.tabGroupsEnabled.toggle() }
+        tabsItem.state = Settings.shared.tabGroupsEnabled ? .on : .off
+        menu.addItem(tabsItem)
+        if Settings.shared.tabGroupsEnabled && !AX.trusted {
+            menu.addItem(ClosureMenuItem("Allow Accessibility…", symbol: "lock.open") { AX.openPrivacyPane() })
         }
 
         let recent = Settings.shared.recent

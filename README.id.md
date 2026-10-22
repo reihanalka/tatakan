@@ -28,10 +28,26 @@ Tatakan itu tempat naruh barang sebentar. Begitu juga app ini: taruh file dulu s
 | Copy, buka, simpan/pindah ke folder, ZIP | ✅ | ✅ |
 | Resize & convert gambar, ambil teks dari gambar (OCR) | ✅ | ✅ |
 | Share | ✅ AirDrop, Messages, Mail | ✅ Nearby Share, Mail, app lain |
+| **Tab Groups**: gabungin window apa aja jadi satu, dengan strip tab di atasnya | ✅ | — khusus Mac |
 | **Nook**: panel notch (Now Playing, Tray, Kalender, Timer, Notes) | ✅ | — khusus Mac |
 | Mirror, notifikasi Bluetooth & baterai di notch | ✅ | — khusus Mac |
 
 Fitur notch cuma ada di Mac, karena notch-nya memang cuma ada di MacBook. Versi Windows fokus ke rak-nya.
+
+### Tab Groups (Mac, beta)
+
+Nyalain **Tab Groups** dari ikon Tatakan di menu bar (default-nya mati). macOS bakal minta izin Accessibility sekali, karena cuma lewat izin itu app bisa mindahin window app lain.
+
+- **Bikin grup**: seret window dari title bar ke **tengah** window lain, terus diam ½ detik. Labelnya berubah dari *Hold to tab* jadi *Tab*. Lepas. App-nya boleh beda-beda, misalnya Figma + brief PDF + Safari.
+- **Ganti tab**: klik tab-nya, atau `⌃⌥⇥` / `⌃⌥⇧⇥`.
+- **Geser grup**: seret window yang lagi kelihatan, strip-nya ikut.
+- **Urutin**: seret tab ke samping. **Cabut**: seret tab keluar dari strip.
+- **Klik kanan tab**: Close Tab, Move Out of Group, Separate All Tabs.
+- App yang nggak mau digabung, masukin ke **Settings → Never group these apps**.
+
+Tab yang lagi disembunyiin nunggu di luar pojok layar. Pas Tatakan di-quit (atau dimatiin paksa), semuanya balik ke layar.
+
+![Strip tab, light dan dark](docs/screenshots/tab-groups-strip.png)
 
 ![Tatakan di Windows](docs/screenshots/windows-shelves.png)
 

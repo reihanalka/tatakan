@@ -3,7 +3,8 @@ name: Release
 # Push a tag like v0.4.0 → builds on clean runners and attaches to the GitHub release:
 #   macOS   Tatakan-<ver>.pkg / .dmg / .zip + SHA256SUMS.txt          (Apple Silicon + Intel)
 #   Windows Tatakan-Setup-<ver>.exe + SHA256SUMS-windows.txt          (x64 + ARM64, no notch features)
-# Tatakan/Info.plist and windows/Tatakan/Tatakan.csproj must both carry the tag's version.
+# Tatakan/Info.plist must carry the tag's version. The Windows job only builds when
+# windows/Tatakan/Tatakan.csproj carries it too, so a Mac-only release (e.g. v0.5.0) is fine.
 on:
   push:
     tags: ["v*"]
@@ -49,15 +50,18 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Check version matches tag
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Is this a Windows release too?
+        id: ver
         shell: pwsh
         run: |
           [xml]$p = Get-Content windows\Tatakan\Tatakan.csproj
           $v = $p.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
-          if ("v$v" -ne $env:GITHUB_REF_NAME) { throw "Tatakan.csproj is $v but tag is $env:GITHUB_REF_NAME" }
+          $build = (-not $env:GITHUB_REF_NAME.StartsWith('v')) -or ("v$v" -eq $env:GITHUB_REF_NAME)
+          if (-not $build) { Write-Host "::notice::Tatakan.csproj is $v, tag is $env:GITHUB_REF_NAME: Mac-only release, Windows skipped." }
+          "build=$($build.ToString().ToLower())" >> $env:GITHUB_OUTPUT
 
       - name: Build app (x64 + arm64) and installer
+        if: steps.ver.outputs.build == 'true'
         shell: pwsh
         run: |
           choco install innosetup --no-progress -y | Out-Null
@@ -69,7 +73,7 @@ jobs:
           [IO.File]::WriteAllText("$PWD\windows\dist\SHA256SUMS-windows.txt", (($lines -join "`n") + "`n"))
 
       - name: Upload to release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: steps.ver.outputs.build == 'true' && startsWith(github.ref, 'refs/tags/')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -82,6 +86,7 @@ jobs:
           gh release upload "$GITHUB_REF_NAME" windows/dist/Tatakan-Setup-*.exe windows/dist/SHA256SUMS-windows.txt --clobber
 
       - uses: actions/upload-artifact@v4
+        if: steps.ver.outputs.build == 'true'
         with:
           name: tatakan-windows
           path: |

@@ -1,14 +1,16 @@
 # One-line installer for Tatakan on Windows:
 #   irm https://raw.githubusercontent.com/reihanalka/tatakan/main/windows/install.ps1 | iex
-# Downloads the latest Tatakan-Setup-*.exe from GitHub and runs it silently (installs .NET 8 if missing).
+# Downloads the newest Tatakan-Setup-*.exe from GitHub and runs it silently (installs .NET 8 if missing).
+# Some releases are Mac only, so it looks for the newest release that has a Windows installer.
 $ErrorActionPreference = 'Stop'
 $repo = 'reihanalka/tatakan'
 
 if ([Environment]::OSVersion.Version.Major -lt 10) { throw 'Tatakan needs Windows 10 or 11.' }
 
 Write-Host 'Finding the latest Tatakan release...'
-$release = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -Headers @{ 'User-Agent' = 'tatakan-installer' }
-$asset = $release.assets | Where-Object { $_.name -like 'Tatakan-Setup-*.exe' } | Select-Object -First 1
+$releases = Invoke-RestMethod "https://api.github.com/repos/$repo/releases?per_page=30" -Headers @{ 'User-Agent' = 'tatakan-installer' }
+$asset = $releases | Where-Object { -not $_.draft -and -not $_.prerelease } |
+    ForEach-Object { $_.assets | Where-Object { $_.name -like 'Tatakan-Setup-*.exe' } } | Select-Object -First 1
 if (-not $asset) { throw "No Windows installer found on github.com/$repo/releases." }
 
 $file = Join-Path $env:TEMP $asset.name

@@ -17,12 +17,16 @@ final class Settings: ObservableObject {
     @Published var notchOpenOnHover: Bool { didSet { d.set(notchOpenOnHover, forKey: "notchOpenOnHover") } }
     @Published var notchMediaPeek: Bool { didSet { d.set(notchMediaPeek, forKey: "notchMediaPeek") } }
     @Published var liveActivities: Bool { didSet { d.set(liveActivities, forKey: "liveActivities") } }
+    // Tab groups (any windows)
+    @Published var tabGroupsEnabled: Bool { didSet { d.set(tabGroupsEnabled, forKey: "tabGroupsEnabled"); TabGroupController.shared.sync() } }
+    @Published var tabGroupsIgnored: [String] { didSet { d.set(tabGroupsIgnored, forKey: "tabGroupsIgnored") } }
 
     private init() {
         d.register(defaults: ["shakeEnabled": true, "shakeSensitivity": 0.5,
                               "removeAfterDrag": true, "closeWhenEmpty": true,
                               "notchEnabled": true, "notchOpenOnHover": true, "notchMediaPeek": true,
-                              "liveActivities": true])
+                              "liveActivities": true,
+                              "tabGroupsEnabled": false])
         shakeEnabled = d.bool(forKey: "shakeEnabled")
         shakeSensitivity = d.double(forKey: "shakeSensitivity")
         removeAfterDrag = d.bool(forKey: "removeAfterDrag")
@@ -32,6 +36,8 @@ final class Settings: ObservableObject {
         notchOpenOnHover = d.bool(forKey: "notchOpenOnHover")
         notchMediaPeek = d.bool(forKey: "notchMediaPeek")
         liveActivities = d.bool(forKey: "liveActivities")
+        tabGroupsEnabled = d.bool(forKey: "tabGroupsEnabled")
+        tabGroupsIgnored = d.stringArray(forKey: "tabGroupsIgnored") ?? []
     }
 
     func setLaunchAtLogin(_ on: Bool) {
@@ -57,7 +63,19 @@ final class Settings: ObservableObject {
 /// @State is a macro unavailable without Xcode → use a tiny ObservableObject.
 extension Notification.Name { static let tatakanNotchToggled = Notification.Name("tatakanNotchToggled") }
 
-final class PickState: ObservableObject { @Published var picked = "" }
+final class PickState: ObservableObject {
+    @Published var picked = ""
+    @Published var pickedTabs = ""
+    @Published var trusted = AX.trusted
+    private var timer: Timer?
+    init() {
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            guard let self, self.trusted != AX.trusted else { return }
+            self.trusted = AX.trusted
+        }
+    }
+    deinit { timer?.invalidate() }
+}
 
 struct SettingsView: View {
     @ObservedObject var s = Settings.shared
@@ -82,6 +100,39 @@ struct SettingsView: View {
                 Toggle("Live activities (battery, Bluetooth, timer)", isOn: $s.liveActivities)
                     .disabled(!s.notchEnabled)
                 LabeledContent("Toggle the Nook", value: "⌃⌥N")
+            }
+            Section("Tab Groups (beta)") {
+                Toggle("Group any windows as tabs", isOn: $s.tabGroupsEnabled)
+                if s.tabGroupsEnabled && !ui.trusted {
+                    LabeledContent("Accessibility") {
+                        HStack {
+                            Text("Needed to move windows").font(.caption).foregroundStyle(.secondary)
+                            Button("Open Privacy Settings") { AX.openPrivacyPane() }
+                        }
+                    }
+                }
+                LabeledContent("Make a group", value: "Drag onto a window's middle, hold ½ s")
+                LabeledContent("Take a tab out", value: "Drag it off the strip")
+                LabeledContent("Next / previous tab", value: "⌃⌥⇥ · ⌃⌥⇧⇥")
+            }
+            Section("Never group these apps") {
+                ForEach(s.tabGroupsIgnored, id: \.self) { bid in
+                    HStack {
+                        Text(appName(bid))
+                        Spacer()
+                        Button { s.tabGroupsIgnored.removeAll { $0 == bid } } label: { Image(systemName: "minus.circle") }
+                            .buttonStyle(.borderless)
+                    }
+                }
+                HStack {
+                    Picker("Add app", selection: $ui.pickedTabs) {
+                        Text("Choose a running app…").tag("")
+                        ForEach(runningApps.filter { !s.tabGroupsIgnored.contains($0.0) }, id: \.0) { Text($0.1).tag($0.0) }
+                    }
+                    Button("Add") {
+                        if !ui.pickedTabs.isEmpty { s.tabGroupsIgnored.append(ui.pickedTabs); ui.pickedTabs = "" }
+                    }.disabled(ui.pickedTabs.isEmpty)
+                }
             }
             Section("Shelf") {
                 Toggle("Open a shelf when I shake the pointer while dragging", isOn: $s.shakeEnabled)
@@ -124,8 +175,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460)
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(width: 460, height: min(720, (NSScreen.main?.visibleFrame.height ?? 800) - 80))
     }
 
     private func appName(_ bid: String) -> String {
